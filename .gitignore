@@ -1,3 +1,11 @@
-/data
-.vscode
-__pycache__
+# Python 自动生成文件
+__pycache__/
+*.py[cod]
+
+# Jupyter 临时缓存
+.ipynb_checkpoints/
+
+# 数据集和训练缓存
+data/
+checkpoints/
+.vscode/

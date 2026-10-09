@@ -37,6 +37,14 @@ class SIDDDataset(Dataset):
         else:
             self.project_root = Path(project_root).resolve()
 
+        # 验证集预处理缓存目录
+        self.val_cache_dir = (
+            self.project_root
+            / "data"
+            / "cache"
+            / "sidd_val"
+        )
+
         # 3. 定位 CSV 文件
         csv_path = (
             self.project_root
@@ -103,6 +111,33 @@ class SIDDDataset(Dataset):
             index = index // self.patches_per_image
 
         noisy_path, gt_path = self.samples[index]
+
+            # 验证集优先读取预处理缓存
+        if self.split == "val" and self.val_cache_dir.is_dir():
+
+            noisy_cache = self.val_cache_dir / f"val_{index:04d}_noisy.npy"
+            gt_cache = self.val_cache_dir / f"val_{index:04d}_gt.npy"
+
+            if not noisy_cache.is_file() or not gt_cache.is_file():
+                raise FileNotFoundError(
+                    f"验证集缓存不完整，索引：{index}"
+                )
+
+            noisy = np.load(noisy_cache, allow_pickle=False)
+            gt = np.load(gt_cache, allow_pickle=False)
+
+            expected_shape = (
+                self.eval_patch_size,
+                self.eval_patch_size,
+                3
+            )
+
+            if noisy.shape != expected_shape or gt.shape != expected_shape:
+                raise ValueError(
+                    f"验证集缓存尺寸异常，索引：{index}"
+                )
+
+            return self._to_tensor(noisy), self._to_tensor(gt)
 
         # 2. 读取图片
         with Image.open(noisy_path) as img:
