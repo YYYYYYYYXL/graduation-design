@@ -16,7 +16,7 @@ from src.datasets.sidd_grouped_dataset import SIDDGroupedDataset
 # 1. 训练参数配置
 # ==========================================
 
-EPOCHS = 4
+EPOCHS = 20
 BATCH_SIZE = 8
 LEARNING_RATE = 0.001
 PATCH_SIZE = 128
