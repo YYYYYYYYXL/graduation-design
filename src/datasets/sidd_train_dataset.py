@@ -1,6 +1,5 @@
-
+"""正式训练的数据集：从历史全图 .npy 缓存随机抽取多组 Patch。"""
 import random
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -8,7 +7,7 @@ import torch
 from src.datasets.sidd_dataset import SIDDDataset
 
 
-class SIDDGroupedDataset(SIDDDataset):
+class SIDDTrainDataset(SIDDDataset):
 
     def __init__(
         self,
@@ -23,6 +22,7 @@ class SIDDGroupedDataset(SIDDDataset):
             project_root=project_root
         )
 
+        # 兼容历史训练缓存的 test_ 前缀（实际内容为 train 集）
         # 完整图像解码缓存目录
         self.cache_dir = (
             self.project_root
