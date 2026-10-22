@@ -1,0 +1,111 @@
+{
+  "repository": "https://github.com/swz30/Restormer",
+  "commit": "68dc6ac472db26f16361150cb7a96a1bc87da93f",
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "upstream_sha256": "2b93776512924bc095ec5d97a79d76cf1ab401ae641d1ae1f46e94f1c53a2e59"
+    },
+    {
+      "path": "basicsr/train.py",
+      "upstream_sha256": "4f4f8a14a456d2a58f9c5573ab5da22fea2a02db72187960479bb5fb55fd11bf"
+    },
+    {
+      "path": "basicsr/version.py",
+      "upstream_sha256": "3b9f6c70869c2624817e770fe940e1a7e1d0174db263094a98ca0f9acf4b4b27"
+    },
+    {
+      "path": "basicsr/data/__init__.py",
+      "upstream_sha256": "e8b49498e2d615ac5c8b44290abdfe6e00c5dad92072b84d9cd8a9c30b42d2db"
+    },
+    {
+      "path": "basicsr/data/data_sampler.py",
+      "upstream_sha256": "3e02c25f3bb509a4573e9e5265678bf1570cdb954cbbe0bb5820496e6070fdfd"
+    },
+    {
+      "path": "basicsr/data/prefetch_dataloader.py",
+      "upstream_sha256": "6b1d1b23b343a4c62c48cee9b2331d25610ddb2f6a16e3487bf1c79ba0722132"
+    },
+    {
+      "path": "basicsr/metrics/__init__.py",
+      "upstream_sha256": "19b309387800e068cf223135e5589982e919b85048221a2beb59d8bfc62bc950"
+    },
+    {
+      "path": "basicsr/metrics/metric_util.py",
+      "upstream_sha256": "9b9a585e55d8148926325ef7b136819adeff18bc6031e37af0c44620c6a9f953"
+    },
+    {
+      "path": "basicsr/metrics/psnr_ssim.py",
+      "upstream_sha256": "08b718c908adb4e4bfeb2dd4d00765ae1e026398558c867d27e8ded32a07d6df"
+    },
+    {
+      "path": "basicsr/models/__init__.py",
+      "upstream_sha256": "bce5fd36d2032bf369212ce1f12a433550547dd1bcf681238ca14d6beeaa6b33"
+    },
+    {
+      "path": "basicsr/models/archs/__init__.py",
+      "upstream_sha256": "512da3ef274822c0527074b288232f27e4c32e9fff6194e484c413b8ee9e598a"
+    },
+    {
+      "path": "basicsr/models/archs/restormer_arch.py",
+      "upstream_sha256": "3be243fa3c8e2cb2c9459eeac062b04d6084dbcc328292dae1c3e52ba6f7434a"
+    },
+    {
+      "path": "basicsr/models/base_model.py",
+      "upstream_sha256": "0dc016c0a13758a4e6c2f9221fae2cecc633e28030948ec1795d1f0ed0ae4463"
+    },
+    {
+      "path": "basicsr/models/image_restoration_model.py",
+      "upstream_sha256": "86bb33b4a2d2613cdb752515f64130b8502f9ac810f645e3d82590816cbd2eed"
+    },
+    {
+      "path": "basicsr/models/losses/__init__.py",
+      "upstream_sha256": "5d6163df92cab67afb8b9d3fe0dea7f646d36f4a140ba58745fa4f6f145c3d67"
+    },
+    {
+      "path": "basicsr/models/losses/loss_util.py",
+      "upstream_sha256": "82f853d6ea416606e7a1871143cda4dc72cf47640eebeca2e96118748d290b59"
+    },
+    {
+      "path": "basicsr/models/losses/losses.py",
+      "upstream_sha256": "66f8ac4aa064aa41e4e22be2b0d7950b466d353b92fc1cfa586fee3d6d282fa0"
+    },
+    {
+      "path": "basicsr/models/lr_scheduler.py",
+      "upstream_sha256": "7b1ec76ffd9b220b666252d5f409f9b4ac92ef22b386ed1b243a00661d73d65a"
+    },
+    {
+      "path": "basicsr/utils/__init__.py",
+      "upstream_sha256": "e6eb3fd26f5825ba22fef93714ca570ca0dc12529656358020f128020caefe42"
+    },
+    {
+      "path": "basicsr/utils/file_client.py",
+      "upstream_sha256": "42ea6039e7740231244c36a1c004349a3dbb87fe144f4d9228324c7ef2ab702b"
+    },
+    {
+      "path": "basicsr/utils/img_util.py",
+      "upstream_sha256": "3923ce0be0afa89a51346d61e1279a7b62aaac4c78636f4d0b6dc120cb550eab"
+    },
+    {
+      "path": "basicsr/utils/logger.py",
+      "upstream_sha256": "dbb4f301be394c314df6a2b5f3052dc1bf92c8a9d1b47deba955aebe3d1edbf9"
+    },
+    {
+      "path": "basicsr/utils/misc.py",
+      "upstream_sha256": "b30b97c02419e674f73ab10bcb875af543e4c38f3fa37729a724cd3636c636a2"
+    },
+    {
+      "path": "basicsr/utils/dist_util.py",
+      "upstream_sha256": "8be49ebc8c1d049826fcace2c6d2ff699c54beb3be9ee91eaae42e22d34e3dd5"
+    },
+    {
+      "path": "basicsr/utils/options.py",
+      "upstream_sha256": "8b1eb0375f895f9e4421ad58929d8722aab96a74101619bb35dac6c23f0397cb"
+    },
+    {
+      "path": "basicsr/utils/matlab_functions.py",
+      "upstream_sha256": "0095b6cb513f4a0eab72157fd0c8a1d775d070414e91d4b6d8c7fde9e39e650e"
+    }
+  ],
+  "note": "Upstream hashes before project adaptations. See ADAPTATIONS.md."
+}

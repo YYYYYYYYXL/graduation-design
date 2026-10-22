@@ -1,0 +1,2 @@
+# 官方源码固定使用 LF 行尾，便于核对来源哈希。
+third_party/Restormer/** text eol=lf

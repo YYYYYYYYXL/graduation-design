@@ -1,11 +1,20 @@
 # Python 自动生成文件
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Jupyter 临时缓存
 .ipynb_checkpoints/
 
 # 数据集和训练缓存
-data/
-checkpoints/
-.vscode/
+/data/
+/checkpoints/
+/.vscode/
+/results/
+
+# 临时测试与未完成写入文件
+codex_*
+*.part
+*.tmp
