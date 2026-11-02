@@ -1,7 +1,8 @@
-"""P2N 的高斯去噪初始化模型：DIV2K Noise -> GT 有监督预训练。
+"""P2N 初始化模型：DIV2K 合成噪声或 SIDD 真实噪声分别做 Noise -> GT 有监督预训练。
 
 在项目根目录、denoise310 环境中运行：
     python train_p2n_pretrain.py
+    python train_p2n_pretrain.py --dataset sidd
     python train_p2n_pretrain.py --resume
     python train_p2n_pretrain.py --resume --no-amp
     python train_p2n_pretrain.py --resume --no-amp --resume-lr 0.0001
@@ -27,6 +28,9 @@ from torch.utils.data import DataLoader
 
 from p2n.dataset import DIV2KPretrainDataset, SIGMAS
 from p2n.model import ARCHITECTURE, P2NUNet
+from paired_dataset import DenoisingDataset
+from training_utils import validate as validate_paired
+from training_runtime import configure_runtime, loader_options
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -35,7 +39,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data-root", type=Path, default=PROJECT_ROOT / "data")
-    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "checkpoints" / "p2n_pretrain")
+    parser.add_argument("--dataset", choices=("div2k", "sidd"), default="div2k")
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--performance", choices=("reproducible", "fast"), default="reproducible")
     parser.add_argument("--epochs", type=int, default=100, help="目标总轮数，续训时不是追加轮数")
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--val-batch-size", type=int, default=4)
@@ -115,7 +121,11 @@ def train_epoch(model, loader, optimizer, scaler, device, epoch):
 
 
 @torch.no_grad()
-def validate(model, loader, device):
+def validate(model, loader, device, dataset="div2k"):
+    if dataset == "sidd":
+        metrics = validate_paired(model, loader, device)
+        metrics["val_psnr_mean"] = metrics["val_psnr"]
+        return metrics
     model.eval()
     totals = {sigma: {"count": 0, "mse": 0.0, "psnr": 0.0, "noisy_psnr": 0.0} for sigma in SIGMAS}
     for noisy, gt, sigmas in loader:
@@ -151,7 +161,11 @@ def main():
     device = torch.device(args.device)
     if device.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA 不可用；请使用 denoise310 的 CUDA 版 PyTorch，或显式加 --device cpu")
-    output = args.output_dir.resolve()
+    default_output = "p2n_pretrain" if args.dataset == "div2k" else "p2n_pretrain_sidd"
+    output = (args.output_dir or PROJECT_ROOT / "checkpoints" / default_output).resolve()
+    data_root = args.data_root.resolve()
+    if output == data_root or data_root in output.parents:
+        raise ValueError("训练输出不能位于数据目录内")
     if args.resume:
         if not (output / "last.pth").is_file():
             raise FileNotFoundError(f"没有可恢复的断点：{output / 'last.pth'}")
@@ -163,15 +177,18 @@ def main():
     torch.manual_seed(args.seed)
     if device.type == "cuda":
         torch.cuda.manual_seed_all(args.seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
+    configure_runtime(args.performance, device)
 
-    training = DIV2KPretrainDataset(args.data_root, "train")
-    validation = DIV2KPretrainDataset(args.data_root, "val")
-    if training.source_ids & validation.source_ids:
+    if args.dataset == "div2k":
+        training = DIV2KPretrainDataset(data_root, "train")
+        validation = DIV2KPretrainDataset(data_root, "val")
+    else:
+        training = DenoisingDataset(data_root, "sidd", "train")
+        validation = DenoisingDataset(data_root, "sidd", "val")
+    if args.dataset == "div2k" and training.source_ids & validation.source_ids:
         raise ValueError("训练集和验证集存在原图交叉")
     generator = torch.Generator()
-    common = dict(num_workers=args.workers, pin_memory=device.type == "cuda")
+    common = loader_options(args.workers, device, args.performance)
     train_loader = DataLoader(training, batch_size=args.batch_size, shuffle=True,
                               generator=generator, drop_last=False, **common)
     val_loader = DataLoader(validation, batch_size=args.val_batch_size, shuffle=False, **common)
@@ -185,10 +202,15 @@ def main():
         "architecture": ARCHITECTURE, "seed": args.seed, "batch_size": args.batch_size,
         "lr": args.lr, "lr_step": args.lr_step, "lr_gamma": 0.5,
         "optimizer": "Adam", "loss": "MSE", "amp": scaler.is_enabled(),
-        "train_manifest_sha256": training.manifest_sha256,
-        "val_manifest_sha256": validation.manifest_sha256,
-        "sigmas": list(SIGMAS), "input_range": [0.0, 1.0],
+        "train_manifest_sha256": (training.manifest_sha256 if args.dataset == "div2k" else training.fingerprint),
+        "val_manifest_sha256": (validation.manifest_sha256 if args.dataset == "div2k" else validation.fingerprint),
+        "sigmas": list(SIGMAS) if args.dataset == "div2k" else None, "input_range": [0.0, 1.0],
     }
+    if args.dataset == "sidd":
+        config["dataset"] = "sidd"
+        config["metric"] = "8bit RGB PSNR and channelwise Gaussian11 SSIM"
+    if args.performance == "fast":
+        config["performance"] = "fast_tf32_cudnn_benchmark"
     history, best_psnr, start_epoch = [], -math.inf, 1
     if args.resume:
         state = torch.load(output / "last.pth", map_location="cpu", weights_only=True)
@@ -236,7 +258,7 @@ def main():
         generator.manual_seed(args.seed + epoch)
         lr = optimizer.param_groups[0]["lr"]
         train_loss = train_epoch(model, train_loader, optimizer, scaler, device, epoch)
-        metrics = validate(model, val_loader, device)
+        metrics = validate(model, val_loader, device, args.dataset)
         scheduler.step()
         row = dict(epoch=epoch, lr=lr, train_mse=train_loss, **metrics,
                    seconds=time.perf_counter() - started)
@@ -257,7 +279,8 @@ def main():
                           cuda_rng=torch.cuda.get_rng_state_all() if device.type == "cuda" else [])
         save_checkpoint(checkpoint, output / "last.pth")
         write_history(history, output / "history.csv")
-        scores = " | ".join(f"σ{s}: {metrics[f'val_psnr_{s}']:.2f} dB" for s in SIGMAS)
+        scores = (" | ".join(f"σ{s}: {metrics[f'val_psnr_{s}']:.2f} dB" for s in SIGMAS)
+                  if args.dataset == "div2k" else f"SIDD: {metrics['val_psnr']:.2f} dB")
         print(f"Epoch {epoch}/{args.epochs} | {scores} | 平均 {metrics['val_psnr_mean']:.2f} dB"
               f" | {row['seconds']:.1f}s" + (" | 更新最佳权重" if improved else ""), flush=True)
 

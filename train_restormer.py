@@ -29,6 +29,7 @@ from tqdm import tqdm
 from training_utils import early_stopping_status, save_checkpoint, write_history, validate
 from restormer.model import ARCHITECTURE, create_model
 from paired_dataset import DenoisingDataset
+from training_runtime import configure_runtime, loader_options
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -43,6 +44,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--val-batch-size", type=int, default=1)
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--performance", choices=("reproducible", "fast"), default="reproducible")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--lr-step", type=int, default=50)
     parser.add_argument("--early-stop-min-epochs", type=int, default=60,
@@ -117,14 +119,13 @@ def main():
     torch.manual_seed(args.seed)
     if device.type == "cuda":
         torch.cuda.manual_seed_all(args.seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
+    configure_runtime(args.performance, device)
     training = DenoisingDataset(data_root, args.dataset, "train")
     validation = DenoisingDataset(data_root, args.dataset, "val")
     if args.dataset == "div2k" and training.source_ids & validation.source_ids:
         raise ValueError("DIV2K训练和验证存在原图交叉")
     generator = torch.Generator()
-    common = dict(num_workers=args.workers, pin_memory=device.type == "cuda", drop_last=False)
+    common = dict(loader_options(args.workers, device, args.performance), drop_last=False)
     train_loader = DataLoader(training, batch_size=args.batch_size, shuffle=True, generator=generator, **common)
     val_loader = DataLoader(validation, batch_size=args.val_batch_size, shuffle=False, **common)
 
@@ -142,6 +143,8 @@ def main():
                   sigmas=[15, 25, 50] if args.dataset == "div2k" else None,
                   noise_type="fixed_gaussian_png" if args.dataset == "div2k" else "real")
     history, best_psnr, start_epoch = [], -math.inf, 1
+    if args.performance == "fast":
+        config["performance"] = "fast_tf32_cudnn_benchmark"
     if state is not None:
         if state["config"] != config:
             raise ValueError("断点数据版本或训练设置不同，恢复原设置或另开输出目录")

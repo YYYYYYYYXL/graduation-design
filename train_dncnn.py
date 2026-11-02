@@ -27,6 +27,7 @@ from tqdm import tqdm
 from training_utils import early_stopping_status, save_checkpoint, write_history, validate
 from dncnn.model import ARCHITECTURE, DnCNN
 from paired_dataset import DenoisingDataset
+from training_runtime import configure_runtime, loader_options
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -41,6 +42,8 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--val-batch-size", type=int, default=1)
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--performance", choices=("reproducible", "fast"), default="reproducible")
+    parser.add_argument("--precision", choices=("fp32", "bf16"), default="fp32")
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--lr-step", type=int, default=50)
     parser.add_argument("--early-stop-min-epochs", type=int, default=60,
@@ -64,7 +67,7 @@ def parse_args():
     return args
 
 
-def train_epoch(model, loader, optimizer, device, epoch):
+def train_epoch(model, loader, optimizer, device, epoch, precision="fp32"):
     model.train()
     total, count = 0.0, 0
     with tqdm(loader, desc=f"Epoch {epoch} 训练", unit="batch", dynamic_ncols=True,
@@ -72,8 +75,10 @@ def train_epoch(model, loader, optimizer, device, epoch):
         for step, (noisy, gt, _) in enumerate(progress, 1):
             noisy, gt = noisy.to(device, non_blocking=True), gt.to(device, non_blocking=True)
             optimizer.zero_grad(set_to_none=True)
-            predicted_noise = model.predict_noise(noisy)
-            loss = F.mse_loss(predicted_noise, noisy - gt)
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16,
+                                enabled=device.type == "cuda" and precision == "bf16"):
+                predicted_noise = model.predict_noise(noisy)
+                loss = F.mse_loss(predicted_noise, noisy - gt)
             if not torch.isfinite(loss):
                 raise RuntimeError(f"Epoch {epoch} 第{step}批损失非有限，停止本轮")
             loss.backward()
@@ -110,14 +115,15 @@ def main():
     torch.manual_seed(args.seed)
     if device.type == "cuda":
         torch.cuda.manual_seed_all(args.seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
+    configure_runtime(args.performance, device)
+    if args.precision == "bf16" and (device.type != "cuda" or not torch.cuda.is_bf16_supported()):
+        raise ValueError("BF16 训练需要支持 BF16 的 CUDA 显卡")
     training = DenoisingDataset(data_root, args.dataset, "train")
     validation = DenoisingDataset(data_root, args.dataset, "val")
     if args.dataset == "div2k" and training.source_ids & validation.source_ids:
         raise ValueError("DIV2K训练和验证存在原图交叉")
     generator = torch.Generator()
-    common = dict(num_workers=args.workers, pin_memory=device.type == "cuda", drop_last=False)
+    common = dict(loader_options(args.workers, device, args.performance), drop_last=False)
     train_loader = DataLoader(training, batch_size=args.batch_size, shuffle=True, generator=generator, **common)
     val_loader = DataLoader(validation, batch_size=args.val_batch_size, shuffle=False, **common)
 
@@ -126,13 +132,16 @@ def main():
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=0.5)
     config = dict(architecture=ARCHITECTURE, dataset=args.dataset, seed=args.seed,
                   batch_size=args.batch_size, lr=args.lr, lr_step=args.lr_step, lr_gamma=0.5,
-                  optimizer="Adam", loss="MSE(noise_residual)", precision="FP32", max_grad_norm=1.0,
+                  optimizer="Adam", loss="MSE(noise_residual)",
+                  precision="BF16" if args.precision == "bf16" else "FP32", max_grad_norm=1.0,
                   train_fingerprint=training.fingerprint, val_fingerprint=validation.fingerprint,
                   online_noise=False, online_crop=False, online_augmentation=False,
                   metric="8bit RGB PSNR and channelwise Gaussian11 SSIM",
                   sigmas=[15, 25, 50] if args.dataset == "div2k" else None,
                   noise_type="fixed_gaussian_png" if args.dataset == "div2k" else "real")
     history, best_psnr, start_epoch = [], -math.inf, 1
+    if args.performance == "fast":
+        config["performance"] = "fast_tf32_cudnn_benchmark"
     if state:
         if state["config"] != config:
             raise ValueError("断点数据版本或训练设置不同，恢复原设置或另开输出目录")
@@ -168,7 +177,7 @@ def main():
         started = time.perf_counter()
         generator.manual_seed(args.seed + epoch)
         lr = optimizer.param_groups[0]["lr"]
-        train_mse = train_epoch(model, train_loader, optimizer, device, epoch)
+        train_mse = train_epoch(model, train_loader, optimizer, device, epoch, args.precision)
         metrics = validate(model, val_loader, device, epoch=epoch)
         scheduler.step()
         row = dict(epoch=epoch, lr=lr, train_mse=train_mse, **metrics, seconds=time.perf_counter() - started)
