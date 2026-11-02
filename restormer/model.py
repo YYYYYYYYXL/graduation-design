@@ -1,23 +1,35 @@
-"""直接导出项目内的官方Restormer结构，不再维护另一份自写网络。"""
+"""Restormer网络与权重加载。"""
+
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
 import torch
 
-from restormer.official import use_official_source
-
-use_official_source()
-from basicsr.models.archs.restormer_arch import Restormer
+# 只加载网络文件，不导入BasicSR训练框架，也不修改全局模块搜索路径。
+_source = Path(__file__).resolve().parents[1] / "third_party/Restormer/basicsr/models/archs/restormer_arch.py"
+_spec = spec_from_file_location("restormer._architecture", _source)
+_module = module_from_spec(_spec)
+_spec.loader.exec_module(_module)
+Restormer = _module.Restormer
 
 
 ARCHITECTURE = "official_restormer_68dc6ac_rgb_biasfree"
 
 
-def load_trained(path, device="cpu"):
-    """推理时加载官方训练程序输出的net_g_*.pth；训练入口不调用此函数。"""
-    state = torch.load(path, map_location="cpu", weights_only=True)
-    if "params" not in state:
-        raise ValueError("要求官方训练格式的params字典，旧版项目自写权重不适用于此结构")
-    model = Restormer(inp_channels=3, out_channels=3, dim=48, num_blocks=[4, 6, 6, 8],
+def create_model():
+    """创建随机初始化的完整RGB去噪模型；训练与推理共用同一份结构配置。"""
+    return Restormer(inp_channels=3, out_channels=3, dim=48, num_blocks=[4, 6, 6, 8],
                       num_refinement_blocks=4, heads=[1, 2, 4, 8], ffn_expansion_factor=2.66,
                       bias=False, LayerNorm_type="BiasFree", dual_pixel_task=False)
+
+
+def load_trained(path, device="cpu"):
+    """加载本训练器best/last.pth或旧版net_g_*.pth；不用于初始化训练。"""
+    state = torch.load(path, map_location="cpu", weights_only=True)
+    if "params" not in state:
+        raise ValueError("权重必须包含params字典，并与当前Restormer结构匹配")
+    if state.get("architecture", ARCHITECTURE) != ARCHITECTURE:
+        raise ValueError("权重结构标识与当前Restormer不匹配")
+    model = create_model()
     model.load_state_dict(state["params"], strict=True)
     return model.to(device).eval()

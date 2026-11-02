@@ -12,7 +12,6 @@ DIV2K直接读取manifest中的三档固定噪声；SIDD直接读取真实噪声
 """
 
 import argparse
-import csv
 import json
 import math
 import random
@@ -23,8 +22,9 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-from denoising_metrics import to_uint8, calculate_psnr, calculate_ssim
+from training_utils import early_stopping_status, save_checkpoint, write_history, validate
 from dncnn.model import ARCHITECTURE, DnCNN
 from paired_dataset import DenoisingDataset
 
@@ -64,90 +64,26 @@ def parse_args():
     return args
 
 
-def early_stopping_status(history, *, min_epochs, patience, min_delta, lr_step):
-    """从已有验证历史重建计数，使续训与连续训练采用相同判断。
-
-    参考PSNR只在累计提升达到阈值时更新；best.pth仍独立保存任何新高。
-    StepLR在第lr_step的整数倍轮次结束后减半，重置计数以观察下一阶段。
-    """
-    reference_psnr = None
-    bad_epochs = 0
-    for row in history:
-        score = row["val_psnr"]
-        gain = score - reference_psnr if reference_psnr is not None else math.inf
-        significant = reference_psnr is None or (score > reference_psnr and
-                      (gain >= min_delta or math.isclose(gain, min_delta, rel_tol=1e-9, abs_tol=1e-12)))
-        if significant:
-            reference_psnr, bad_epochs = score, 0
-        else:
-            bad_epochs += 1
-        if row["epoch"] % lr_step == 0:
-            bad_epochs = 0
-    last_epoch = history[-1]["epoch"] if history else 0
-    return dict(enabled=patience > 0, reference_psnr=reference_psnr, bad_epochs=bad_epochs,
-                should_stop=bool(patience > 0 and last_epoch >= min_epochs and bad_epochs >= patience))
-
-
-def save_checkpoint(payload, path):
-    temporary = path.with_suffix(path.suffix + ".part")
-    torch.save(payload, temporary)
-    temporary.replace(path)
-
-
-def write_history(history, path):
-    temporary = path.with_suffix(".csv.part")
-    with temporary.open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(history[0]))
-        writer.writeheader()
-        writer.writerows(history)
-    temporary.replace(path)
-
-
 def train_epoch(model, loader, optimizer, device, epoch):
     model.train()
     total, count = 0.0, 0
-    for step, (noisy, gt, _) in enumerate(loader, 1):
-        noisy, gt = noisy.to(device, non_blocking=True), gt.to(device, non_blocking=True)
-        optimizer.zero_grad(set_to_none=True)
-        predicted_noise = model.predict_noise(noisy)
-        loss = F.mse_loss(predicted_noise, noisy - gt)
-        if not torch.isfinite(loss):
-            raise RuntimeError(f"Epoch {epoch} 第{step}批损失非有限，停止本轮")
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0, error_if_nonfinite=True)
-        optimizer.step()
-        total += float(loss.detach()) * noisy.size(0)
-        count += noisy.size(0)
-        if step == 1 or step % 100 == 0 or step == len(loader):
-            print(f"Epoch {epoch} | {step}/{len(loader)} | train MSE {total / count:.6f}", flush=True)
+    with tqdm(loader, desc=f"Epoch {epoch} 训练", unit="batch", dynamic_ncols=True,
+              mininterval=0.5) as progress:
+        for step, (noisy, gt, _) in enumerate(progress, 1):
+            noisy, gt = noisy.to(device, non_blocking=True), gt.to(device, non_blocking=True)
+            optimizer.zero_grad(set_to_none=True)
+            predicted_noise = model.predict_noise(noisy)
+            loss = F.mse_loss(predicted_noise, noisy - gt)
+            if not torch.isfinite(loss):
+                raise RuntimeError(f"Epoch {epoch} 第{step}批损失非有限，停止本轮")
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0, error_if_nonfinite=True)
+            optimizer.step()
+            total += float(loss.detach()) * noisy.size(0)
+            count += noisy.size(0)
+            progress.set_postfix(MSE=f"{total / count:.6f}",
+                                 lr=f"{optimizer.param_groups[0]['lr']:.2g}", refresh=False)
     return total / count
-
-
-@torch.no_grad()
-def validate(model, loader, device):
-    model.eval()
-    grouped = {}
-    for noisy, gt, groups in loader:
-        prediction = model(noisy.to(device, non_blocking=True))
-        if not torch.isfinite(prediction).all():
-            raise RuntimeError("验证输出非有限，不能保存本轮best")
-        for output, target, group in zip(prediction, gt, groups):
-            output_pixels, target_pixels = to_uint8(output), to_uint8(target)
-            psnr = calculate_psnr(output_pixels, target_pixels)
-            ssim = calculate_ssim(output_pixels, target_pixels)
-            if not math.isfinite(psnr) or not math.isfinite(ssim):
-                raise RuntimeError("验证指标非有限")
-            values = grouped.setdefault(group, dict(count=0, psnr=0.0, ssim=0.0))
-            values["count"] += 1
-            values["psnr"] += psnr
-            values["ssim"] += ssim
-    count = sum(values["count"] for values in grouped.values())
-    result = {}
-    for metric in ("psnr", "ssim"):
-        result[f"val_{metric}"] = sum(values[metric] for values in grouped.values()) / count
-        for group, values in sorted(grouped.items()):
-            result[f"val_{metric}_{group}"] = values[metric] / values["count"]
-    return result
 
 
 def main():
@@ -180,8 +116,6 @@ def main():
     validation = DenoisingDataset(data_root, args.dataset, "val")
     if args.dataset == "div2k" and training.source_ids & validation.source_ids:
         raise ValueError("DIV2K训练和验证存在原图交叉")
-    if args.dataset == "sidd":
-        print("沿用现有SIDD划分：训练/测试存在实际场景重叠；官方验证块缺少原始场景映射。", flush=True)
     generator = torch.Generator()
     common = dict(num_workers=args.workers, pin_memory=device.type == "cuda", drop_last=False)
     train_loader = DataLoader(training, batch_size=args.batch_size, shuffle=True, generator=generator, **common)
@@ -235,7 +169,7 @@ def main():
         generator.manual_seed(args.seed + epoch)
         lr = optimizer.param_groups[0]["lr"]
         train_mse = train_epoch(model, train_loader, optimizer, device, epoch)
-        metrics = validate(model, val_loader, device)
+        metrics = validate(model, val_loader, device, epoch=epoch)
         scheduler.step()
         row = dict(epoch=epoch, lr=lr, train_mse=train_mse, **metrics, seconds=time.perf_counter() - started)
         history.append(row)

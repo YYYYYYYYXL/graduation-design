@@ -4,3 +4,4 @@ scikit-image>=0.21
 pillow>=9.5
 ipykernel>=6.0
 numpy>=1.24,<2.0
+tqdm>=4.65,<5

@@ -1,1 +1,1 @@
-"""官方Restormer网络/训练入口与本项目固定数据的适配。"""
+"""完整Restormer网络与训练权重加载；训练入口为根目录train_restormer.py。"""
