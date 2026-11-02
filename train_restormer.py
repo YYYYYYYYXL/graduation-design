@@ -57,6 +57,8 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=20261022)
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--allow-batch-size-change", action="store_true",
+                        help="续训时仅允许训练batch不同；仍恢复优化器和调度器，不放行其他关键设置")
     args = parser.parse_args()
     if min(args.epochs, args.batch_size, args.val_batch_size, args.lr_step) < 1 or args.workers < 0:
         parser.error("轮数、batch、lr-step须为正整数，workers不能为负")
@@ -66,7 +68,23 @@ def parse_args():
         parser.error("早停最少轮数须为正整数，等待轮数须为非负整数")
     if not math.isfinite(args.early_stop_min_delta) or args.early_stop_min_delta < 0:
         parser.error("早停PSNR提升阈值须为有限非负数")
+    if args.allow_batch_size_change and not args.resume:
+        parser.error("allow-batch-size-change 需要同时指定 --resume")
     return args
+
+
+def check_resume_config(saved, current, allow_batch_size_change=False):
+    """只对白名单内的batch变化放行，避免把不同数据或优化方案混作同一断点。"""
+    if saved.keys() != current.keys():
+        raise ValueError("断点配置字段不同，不能继续；请使用匹配的代码和配置")
+    changes = {key: {"from": saved[key], "to": current[key]}
+               for key in current if saved[key] != current[key]}
+    allowed = {"batch_size"} if allow_batch_size_change else set()
+    forbidden = set(changes) - allowed
+    if forbidden:
+        raise ValueError(f"断点关键设置不同：{', '.join(sorted(forbidden))}。"
+                         "训练batch变化需显式加 --allow-batch-size-change；其他设置须保持一致")
+    return changes
 
 
 def train_epoch(model, loader, optimizer, scaler, device, epoch):
@@ -143,11 +161,19 @@ def main():
                   sigmas=[15, 25, 50] if args.dataset == "div2k" else None,
                   noise_type="fixed_gaussian_png" if args.dataset == "div2k" else "real")
     history, best_psnr, start_epoch = [], -math.inf, 1
+    resume_transitions = []
     if args.performance == "fast":
         config["performance"] = "fast_tf32_cudnn_benchmark"
     if state is not None:
-        if state["config"] != config:
-            raise ValueError("断点数据版本或训练设置不同，恢复原设置或另开输出目录")
+        changes = check_resume_config(state["config"], config, args.allow_batch_size_change)
+        resume_transitions = list(state.get("resume_transitions", []))
+        if changes:
+            transition = dict(after_epoch=state["epoch"], changes=changes,
+                              new_val_batch_size=args.val_batch_size,
+                              optimizer_restored=True, scheduler_restored=True,
+                              recorded_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+            resume_transitions.append(transition)
+            print(f"续训参数变更：{transition}；每轮更新次数会改变，学习率沿用断点。", flush=True)
         model.load_state_dict(state["params"], strict=True)
         optimizer.load_state_dict(state["optimizer"])
         scheduler.load_state_dict(state["scheduler"])
@@ -162,6 +188,9 @@ def main():
         random.setstate(state["python_rng"])
         rng = state["numpy_rng"]
         np.random.set_state((rng[0], rng[1].numpy().astype(np.uint32), *rng[2:]))
+        print(f"已恢复last：完成{state['epoch']}轮，从第{start_epoch}轮继续；"
+              f"lr={optimizer.param_groups[0]['lr']:g}，batch={args.batch_size}，"
+              f"val_batch={args.val_batch_size}，历史best={best_psnr:.4f}dB", flush=True)
         del state
         if start_epoch > args.epochs:
             print(f"已完成{start_epoch - 1}轮，目标{args.epochs}轮，无需继续。")
@@ -174,6 +203,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     run_info = dict(config, epochs=args.epochs, workers=args.workers, val_batch_size=args.val_batch_size,
                     early_stopping=early_stop_settings,
+                    resume_transitions=resume_transitions,
                     data_root=str(data_root), device=str(device), torch_version=str(torch.__version__))
     (output / "config.json").write_text(json.dumps(run_info, ensure_ascii=False, indent=2), encoding="utf-8")
     if history:
@@ -182,10 +212,17 @@ def main():
     print(f"最多{args.epochs}轮 | batch={args.batch_size} | {config['precision']} | 早停设置：{early_stop_settings}", flush=True)
     for epoch in range(start_epoch, args.epochs + 1):
         started = time.perf_counter()
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
         generator.manual_seed(args.seed + epoch)
         lr = optimizer.param_groups[0]["lr"]
         train_l1 = train_epoch(model, train_loader, optimizer, scaler, device, epoch)
+        train_seconds = time.perf_counter() - started
+        validation_started = time.perf_counter()
         metrics = validate(model, val_loader, device, epoch=epoch)
+        validation_seconds = time.perf_counter() - validation_started
+        peak_memory_mib = (torch.cuda.max_memory_allocated(device) / 2**20
+                           if device.type == "cuda" else 0.0)
         scheduler.step()
         row = dict(epoch=epoch, lr=lr, train_l1=train_l1, **metrics, seconds=time.perf_counter() - started)
         history.append(row)
@@ -195,6 +232,9 @@ def main():
         stopping = early_stopping_status(history, **early_stop_settings)
         payload = dict(format_version=2, architecture=ARCHITECTURE, epoch=epoch, params=model.state_dict(),
                        config=config, metrics=metrics, best_psnr=best_psnr,
+                       resume_transitions=resume_transitions,
+                       epoch_timing=dict(train_seconds=train_seconds, validation_seconds=validation_seconds,
+                                         peak_allocated_mib=peak_memory_mib),
                        early_stopping=dict(settings=early_stop_settings, status=stopping))
         if improved:
             save_checkpoint(payload, output / "best.pth")
@@ -208,6 +248,8 @@ def main():
         write_history(history, output / "history.csv")
         print(f"Epoch {epoch}/{args.epochs} | L1 {train_l1:.6f} | PSNR {metrics['val_psnr']:.3f} dB"
               f" | SSIM {metrics['val_ssim']:.4f} | {row['seconds']:.1f}秒"
+              f" | 训练{train_seconds:.1f}秒 | 验证{validation_seconds:.1f}秒"
+              f" | 峰值allocated {peak_memory_mib:.0f}MiB"
               + (f" | 早停等待 {stopping['bad_epochs']}/{args.early_stop_patience}"
                  if stopping["enabled"] else " | 早停已关闭")
               + (" | 更新best.pth" if improved else ""), flush=True)

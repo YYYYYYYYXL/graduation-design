@@ -33,6 +33,8 @@ def build_command(model, dataset, settings, args):
         command.extend(["--precision", profile["precision"]])
     if args.resume:
         command.append("--resume")
+    if args.allow_batch_size_change:
+        command.append("--allow-batch-size-change")
     return command
 
 
@@ -66,9 +68,12 @@ def main():
     parser.add_argument("--workers", type=int)
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--allow-batch-size-change", action="store_true")
     parser.add_argument("--check-only", action="store_true", help="检查全部训练/验证配对路径及样本，不训练、不使用 GPU")
     parser.add_argument("--print-command", action="store_true", help="只显示绝对路径训练命令，不训练")
     args = parser.parse_args()
+    if args.allow_batch_size_change and (not args.resume or args.model != "restormer"):
+        parser.error("allow-batch-size-change 仅支持 Restormer 的 --resume 续训")
     for field in ("batch_size", "val_batch_size", "epochs"):
         value = getattr(args, field)
         if value is not None and value < 1:
@@ -100,8 +105,14 @@ def main():
         raise RuntimeError("当前无可用 GPU，请先在 AutoDL 控制台以有卡模式开机，再运行同一命令")
     gpu = torch.cuda.get_device_properties(0)
     print(f"GPU：{gpu.name}，显存 {gpu.total_memory / 2**30:.1f} GiB", flush=True)
-    for _, _, command in commands:
-        subprocess.run(command, cwd=PROJECT_ROOT, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, check=True)
+    for model, _, command in commands:
+        environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        if model == "restormer":
+            # 24GB卡上batch16对碎片敏感；保留调用者显式指定的分配器设置。
+            if "PYTORCH_ALLOC_CONF" not in environment:
+                environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+            print("Restormer显存分配：" + environment.get("PYTORCH_ALLOC_CONF", environment.get("PYTORCH_CUDA_ALLOC_CONF", "")), flush=True)
+        subprocess.run(command, cwd=PROJECT_ROOT, env=environment, check=True)
 
 
 if __name__ == "__main__":

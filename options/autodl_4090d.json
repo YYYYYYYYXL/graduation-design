@@ -1,10 +1,10 @@
 {
-  "description": "4090D 24GB 速度优先起始配置，未经 GPU 吞吐/显存实测，不代表最大 batch",
+  "description": "4090D 24GB 速度优先配置；Restormer 16/4已在当前DIV2K裁剪数据实测，显存余量小；其余模型及SIDD仍待对应实测，不代表最大batch",
   "workers": 4,
   "performance": "fast",
   "models": {
     "dncnn": {"batch_size": 32, "val_batch_size": 4, "epochs": 200, "precision": "bf16"},
     "p2n": {"batch_size": 16, "val_batch_size": 2, "epochs": 100, "precision": "amp"},
-    "restormer": {"batch_size": 8, "val_batch_size": 1, "epochs": 200, "precision": "amp"}
+    "restormer": {"batch_size": 16, "val_batch_size": 4, "epochs": 200, "precision": "amp"}
   }
 }

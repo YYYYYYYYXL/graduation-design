@@ -34,13 +34,29 @@ bash /root/autodl-tmp/graduation-design/run_autodl.sh restormer sidd
 | --- | --- | --- | --- | --- |
 | DnCNN | 32 | 4 | BF16 | 200 |
 | P2N 预训练 | 16 | 2 | AMP FP16 | 100 |
-| Restormer | 8 | 1 | AMP FP16 | 200 |
+| Restormer | 16 | 4 | AMP FP16 | 200 |
 
 每组使用 4 个数据加载进程、预取和持久进程；快速模式开启 cuDNN autotune 与 TF32，不保证逐位复现。默认直接训练脚本仍保留原有参数。学习率和衰减计划沿用现有各模型设置；DnCNN/Restormer保留早停规则。
 
 更大的 batch 减少每轮更新次数，与原 batch 的同轮数训练不等价。混合精度和 TF32 也可能影响数值结果。各模型仍使用完整结构、128×128训练块和256×256验证块，不通过缩小网络或数据来提速。
 
-可用 `--batch-size`、`--val-batch-size`、`--workers`、`--epochs` 覆盖起始配置。首次拿卡若显存不足，减半训练 batch；若验证阶段显存不足，减小验证 batch。没有 GPU 实测，不能承诺不会 OOM 或提升多少倍。
+### Restormer 改 batch 后续训
+
+普通 `--resume` 继续要求关键设置一致。显式增加 `--allow-batch-size-change` 时，仅允许训练 `batch_size` 不同，数据指纹、网络结构、学习率方案、精度等仍必须一致。验证 batch 不受此限制。
+
+先在完整一轮保存后暂停，将原目录的 `last.pth`、`best.pth`、`config.json` 和 `history.csv` 复制到新的输出根目录下对应的 `restormer_div2k_fast_4090d/`，再执行：
+
+```bash
+bash /root/autodl-tmp/graduation-design/run_autodl.sh restormer div2k --resume --allow-batch-size-change --batch-size 16 --val-batch-size 4 --output-root checkpoints/restormer_batch16
+```
+
+模型、AdamW状态、学习率调度、GradScaler及随机数状态从 last 恢复；轮次接着增加，不重新初始化训练状态。新配置和权重中会保留 `resume_transitions`，记录变更生效轮次及新旧 batch。原 best 一并保留，后续验证 PSNR 真正超过历史 best 时才更新，不能强行用更差的模型覆盖。新日志额外报告训练/验证耗时与峰值 allocated 显存。
+
+AutoDL 入口对 Restormer 默认启用 `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`，保留调用者显式指定的分配器配置。当前4090D的16/4在默认分配器下曾显存不足，启用该设置后完成了DIV2K第12轮，峰值allocated约23403MiB；显存余量很小。首次运行包含cuDNN算法选择，不能用首轮耗时判断稳定速度；SIDD尚未实测。
+
+2026-11-02：从第11轮的8/1断点转为16/4后，第13轮耗时157.8秒（训练98.5秒、验证59.3秒），原配置最近5轮平均172.9秒，单个预热后轮次耗时减少约8.8%。该轮PSNR为32.989dB，超过原best的32.970dB，已正常更新best和last。这是当前机器和数据的观察值，不代表长期收敛效果或所有设备的提速幅度。
+
+可用 `--batch-size`、`--val-batch-size`、`--workers`、`--epochs` 覆盖起始配置。首次拿卡若显存不足，减小训练 batch；若验证阶段显存不足，减小验证 batch。硬件、数据尺寸和环境不同仍可能显存不足，不能承诺固定提速倍数。
 
 ## 无卡检查
 
