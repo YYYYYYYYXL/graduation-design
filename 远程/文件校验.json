@@ -1,0 +1,159 @@
+{
+  "scope": "Restormer remote migration, processed data only; RTX5090 not measured yet",
+  "data": {
+    "path": "数据/裁剪数据.zip",
+    "bytes": 1488720038,
+    "sha256": "6397175a507b92252f1ffc592f8fccd2c48662ee6e4c0c8aaa2da16e443e1bdb",
+    "validation": {
+      "zip_crc_checked": true,
+      "raw_large_images": false,
+      "files_by_group": {
+        "data/div2k_train/noise_config.json": 1,
+        "data/div2k_train/noise_manifest.csv": 1,
+        "data/div2k_train/noise": 5250,
+        "data/div2k_train/gt": 5250,
+        "data/div2k_val/noise_config.json": 1,
+        "data/div2k_val/noise_manifest.csv": 1,
+        "data/div2k_val/noise": 1200,
+        "data/div2k_val/gt": 400,
+        "data/div2k_test/noise_config.json": 1,
+        "data/div2k_test/noise_manifest.csv": 1,
+        "data/div2k_test/noise": 600,
+        "data/div2k_test/gt": 200,
+        "data/sidd_train/noisy": 5184,
+        "data/sidd_train/gt": 5184,
+        "data/sidd_val/target_crops": 1280,
+        "data/sidd_val/input_crops": 1280,
+        "data/sidd_test/noisy": 512,
+        "data/sidd_test/gt": 512,
+        "data/div2k_split.csv": 1,
+        "data/sidd_split.csv": 1
+      }
+    }
+  },
+  "checkpoints": {
+    "path": "断点/checkpoints.tar.gz",
+    "bytes": 1148477505,
+    "sha256": "73bcceb1c798741582fafff10bb765b498daa90d0424e42b229311fa3e882a8d",
+    "validation": {
+      "gzip_crc_checked": true,
+      "history": {
+        "div2k": {
+          "last_epoch": 75,
+          "best_epoch": 13
+        },
+        "sidd": {
+          "last_epoch": 33,
+          "best_epoch": 16
+        }
+      },
+      "files": {
+        "checkpoints/restormer_batch16_20261102/restormer_div2k_fast_4090d/best.pth": 104610095,
+        "checkpoints/restormer_batch16_20261102/restormer_div2k_fast_4090d/last.pth": 313884637,
+        "checkpoints/restormer_batch16_20261102/restormer_div2k_fast_4090d/config.json": 1368,
+        "checkpoints/restormer_batch16_20261102/restormer_div2k_fast_4090d/history.csv": 15087,
+        "checkpoints/restormer_batch16_20261102/restormer_sidd_fast_4090d/config.json": 1040,
+        "checkpoints/restormer_batch16_20261102/restormer_sidd_fast_4090d/best.pth": 104609711,
+        "checkpoints/restormer_batch16_20261102/restormer_sidd_fast_4090d/last.pth": 313868317,
+        "checkpoints/restormer_batch16_20261102/restormer_sidd_fast_4090d/history.csv": 4182
+      }
+    }
+  },
+  "4090D": {
+    "path": "4090D/远程代码_4090D.zip",
+    "bytes": 36292,
+    "sha256": "4bedba77918d3d9d9300b0558e07d846efcaff52a84e76c316097b538d122c97",
+    "parameters": {
+      "description": "4090D 24GB 速度优先配置；Restormer 16/4已在当前DIV2K裁剪数据实测，显存余量小；其余模型及SIDD仍待对应实测，不代表最大batch",
+      "workers": 4,
+      "performance": "fast",
+      "models": {
+        "restormer": {
+          "batch_size": 16,
+          "val_batch_size": 4,
+          "epochs": 200,
+          "precision": "amp"
+        }
+      },
+      "run_tag": "fast_4090d",
+      "output_root": "checkpoints/remote_4090d",
+      "gpu_family": "4090"
+    },
+    "source_files_sha256": {
+      "README_REMOTE.md": "8a1d042d51142858e8b85ae72a19ebdb8251d6e1f05780e873f2ee44be58e82d",
+      "denoising_metrics.py": "401fabf8d44e7e176b96a07f41dfb8f7e88c902c99f5d9f45043ebaf9dedd367",
+      "options/active_gpu.json": "f02b2ab5447b9e88bbec023535c8e2a30d59891e559fb929d54aca986542183b",
+      "options/autodl_4090d.json": "f02b2ab5447b9e88bbec023535c8e2a30d59891e559fb929d54aca986542183b",
+      "options/autodl_5090.json": "65801719fc7f25b3cae1f908ab746b556326a4170d41d593d3a418e0ef8c0538",
+      "paired_dataset.py": "3c1eef54823579df77936d1ad8e2ca316cca6d5979aa66112c379a6a43dc87e9",
+      "prepare_restormer_resume.py": "7c83521da28744d2e840bbd359d163b37077f0b5d8d6ac367212239ddda3f22f",
+      "probe_restormer.py": "b116b4162bcfe8a9589475c2e14e7c10ea695ddaefdfc74827da1e8427f1c953",
+      "requirements-restormer.txt": "8dcf41087f0bab72eef9779fbc146a02d801b12343dd1781b93cf9a68ba4e07f",
+      "restormer/LICENSE.MIT": "14deb16113379eb4fbdb9fce865bc9d137040b460f890512e28ba744a3b90c82",
+      "restormer/__init__.py": "2792671455340319dcf1835085687f79f973795c8d7f12a6d304560fd7227e05",
+      "restormer/model.py": "b42114a2d8a75d434a963d860642064c30a025a165ddb73a1d3e78dbf30ecc91",
+      "resume_sidd.sh": "5f29fb1459061ff972e6536b7072b6b5de08c1e79cfebd0186a66904423368fe",
+      "run_5090.sh": "e3388460193f94cb37776af8bd95f4f43e4164a6eee9023aadfb9c6a308ff64d",
+      "run_autodl.sh": "c2feb384e27d9aabbd0f239ea6748702ad9da567a6b3cfb83bf4496a528e4ae8",
+      "run_gpu.sh": "53ed47be33441946e5e6621980edd6fdb5fb2e4ffb42e5bcf43953046af974a8",
+      "setup_remote.sh": "c4ff39eebc56716ca690da5aed0fb65e389a59e5936bc64aa0cb424e9c98f30f",
+      "third_party/Restormer/ADAPTATIONS.md": "e82611a2b6b2d252f433511f785a45a945d8b22e1b5b824bc5cd9b73ee36ee11",
+      "third_party/Restormer/LICENSE.md": "2b93776512924bc095ec5d97a79d76cf1ab401ae641d1ae1f46e94f1c53a2e59",
+      "third_party/Restormer/UPSTREAM.json": "b1531c773bcc327fa07c4ed030a86a35c9c9f967880be01981156a04681063fc",
+      "third_party/Restormer/basicsr/models/archs/restormer_arch.py": "4e643c32e71bde7ebdf7cf3660a887a8d90aab261d26813c0bd2f6c39c9add1e",
+      "train_autodl.py": "ce8442fc6fbd44312ba89007505f75c3f1c23cdf6639bcde4be8c188ebdfa31b",
+      "train_restormer.py": "50cc12f1f7e09799a7d7c49fd1359e2ba01cf1a66c9ef7e72faf2bdf92e72400",
+      "training_runtime.py": "a95de259806315ebc2e6bb3bc70ae310663553026f54bd62f49eae60ddfcfe74",
+      "training_utils.py": "b54dc1ab8dcf95bdeb8427be65426d126dd45309df446f571d0d3847e40daff6"
+    }
+  },
+  "5090": {
+    "path": "5090/远程代码_5090.zip",
+    "bytes": 36227,
+    "sha256": "38838a1a37fd4926782f74f741fb81bdac6296c4edb9877bb7ca83c8ddcb3404",
+    "parameters": {
+      "description": "RTX 5090 32GB 待实测起始配置；20/8不是显存或速度上限，先运行probe_restormer.py选择实测配置",
+      "gpu_family": "5090",
+      "minimum_cuda": "12.8",
+      "run_tag": "fast_5090",
+      "output_root": "checkpoints/remote_5090",
+      "workers": 4,
+      "performance": "fast",
+      "models": {
+        "restormer": {
+          "batch_size": 20,
+          "val_batch_size": 8,
+          "epochs": 200,
+          "precision": "amp"
+        }
+      }
+    },
+    "source_files_sha256": {
+      "README_REMOTE.md": "8a1d042d51142858e8b85ae72a19ebdb8251d6e1f05780e873f2ee44be58e82d",
+      "denoising_metrics.py": "401fabf8d44e7e176b96a07f41dfb8f7e88c902c99f5d9f45043ebaf9dedd367",
+      "options/active_gpu.json": "65801719fc7f25b3cae1f908ab746b556326a4170d41d593d3a418e0ef8c0538",
+      "options/autodl_4090d.json": "65801719fc7f25b3cae1f908ab746b556326a4170d41d593d3a418e0ef8c0538",
+      "options/autodl_5090.json": "65801719fc7f25b3cae1f908ab746b556326a4170d41d593d3a418e0ef8c0538",
+      "paired_dataset.py": "3c1eef54823579df77936d1ad8e2ca316cca6d5979aa66112c379a6a43dc87e9",
+      "prepare_restormer_resume.py": "7c83521da28744d2e840bbd359d163b37077f0b5d8d6ac367212239ddda3f22f",
+      "probe_restormer.py": "b116b4162bcfe8a9589475c2e14e7c10ea695ddaefdfc74827da1e8427f1c953",
+      "requirements-restormer.txt": "8dcf41087f0bab72eef9779fbc146a02d801b12343dd1781b93cf9a68ba4e07f",
+      "restormer/LICENSE.MIT": "14deb16113379eb4fbdb9fce865bc9d137040b460f890512e28ba744a3b90c82",
+      "restormer/__init__.py": "2792671455340319dcf1835085687f79f973795c8d7f12a6d304560fd7227e05",
+      "restormer/model.py": "b42114a2d8a75d434a963d860642064c30a025a165ddb73a1d3e78dbf30ecc91",
+      "resume_sidd.sh": "0e4a289f6a19dddecefb334db1ef4bccfb0b767004bd7afcc07df24631a2e589",
+      "run_5090.sh": "e3388460193f94cb37776af8bd95f4f43e4164a6eee9023aadfb9c6a308ff64d",
+      "run_autodl.sh": "c2feb384e27d9aabbd0f239ea6748702ad9da567a6b3cfb83bf4496a528e4ae8",
+      "run_gpu.sh": "53ed47be33441946e5e6621980edd6fdb5fb2e4ffb42e5bcf43953046af974a8",
+      "setup_remote.sh": "c4ff39eebc56716ca690da5aed0fb65e389a59e5936bc64aa0cb424e9c98f30f",
+      "third_party/Restormer/ADAPTATIONS.md": "e82611a2b6b2d252f433511f785a45a945d8b22e1b5b824bc5cd9b73ee36ee11",
+      "third_party/Restormer/LICENSE.md": "2b93776512924bc095ec5d97a79d76cf1ab401ae641d1ae1f46e94f1c53a2e59",
+      "third_party/Restormer/UPSTREAM.json": "b1531c773bcc327fa07c4ed030a86a35c9c9f967880be01981156a04681063fc",
+      "third_party/Restormer/basicsr/models/archs/restormer_arch.py": "4e643c32e71bde7ebdf7cf3660a887a8d90aab261d26813c0bd2f6c39c9add1e",
+      "train_autodl.py": "ce8442fc6fbd44312ba89007505f75c3f1c23cdf6639bcde4be8c188ebdfa31b",
+      "train_restormer.py": "50cc12f1f7e09799a7d7c49fd1359e2ba01cf1a66c9ef7e72faf2bdf92e72400",
+      "training_runtime.py": "a95de259806315ebc2e6bb3bc70ae310663553026f54bd62f49eae60ddfcfe74",
+      "training_utils.py": "b54dc1ab8dcf95bdeb8427be65426d126dd45309df446f571d0d3847e40daff6"
+    }
+  }
+}

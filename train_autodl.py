@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -20,7 +21,7 @@ def project_path(path):
 
 def build_command(model, dataset, settings, args):
     profile = settings["models"][model]
-    output = project_path(args.output_root) / f"{model}_{dataset}_fast_4090d"
+    output = project_path(args.output_root) / f"{model}_{dataset}_{settings.get('run_tag', 'fast_4090d')}"
     command = [sys.executable, "-B", str(PROJECT_ROOT / SCRIPTS[model]),
                "--dataset", dataset, "--data-root", str(project_path(args.data_root)),
                "--output-dir", str(output), "--device", "cuda",
@@ -61,7 +62,7 @@ def main():
     parser.add_argument("model", choices=("all", *SCRIPTS))
     parser.add_argument("dataset", choices=("all", "div2k", "sidd"), nargs="?", default="all")
     parser.add_argument("--data-root", default="data")
-    parser.add_argument("--output-root", default="checkpoints")
+    parser.add_argument("--output-root", help="默认使用profile的output_root，未设置则为checkpoints")
     parser.add_argument("--profile", default="options/autodl_4090d.json")
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--val-batch-size", type=int)
@@ -71,7 +72,7 @@ def main():
     parser.add_argument("--allow-batch-size-change", action="store_true")
     parser.add_argument("--check-only", action="store_true", help="检查全部训练/验证配对路径及样本，不训练、不使用 GPU")
     parser.add_argument("--print-command", action="store_true", help="只显示绝对路径训练命令，不训练")
-    args = parser.parse_args()
+    args = parser.parse_intermixed_args()
     if args.allow_batch_size_change and (not args.resume or args.model != "restormer"):
         parser.error("allow-batch-size-change 仅支持 Restormer 的 --resume 续训")
     for field in ("batch_size", "val_batch_size", "epochs"):
@@ -80,11 +81,17 @@ def main():
             parser.error(f"{field} 必须为正整数")
     if args.workers is not None and args.workers < 0:
         parser.error("workers 不能为负数")
-    data_root, output_root = project_path(args.data_root), project_path(args.output_root)
+    settings = json.loads(project_path(args.profile).read_text(encoding="utf-8"))
+    data_root = project_path(args.data_root)
+    output_root = project_path(args.output_root or settings.get("output_root", "checkpoints"))
+    args.output_root = str(output_root)
     if output_root == data_root or data_root in output_root.parents:
         parser.error("输出目录不能位于数据目录内")
-    settings = json.loads(project_path(args.profile).read_text(encoding="utf-8"))
-    models = list(SCRIPTS) if args.model == "all" else [args.model]
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", settings.get("run_tag", "fast_4090d")):
+        parser.error("profile 的 run_tag 只能包含字母、数字、下划线和短横线")
+    models = [model for model in SCRIPTS if model in settings["models"]] if args.model == "all" else [args.model]
+    if not models or any(model not in settings["models"] for model in models):
+        parser.error("所选显卡配置不包含该模型")
     datasets = ["div2k", "sidd"] if args.dataset == "all" else [args.dataset]
     commands = [(model, dataset, build_command(model, dataset, settings, args))
                 for model in models for dataset in datasets]
@@ -105,6 +112,13 @@ def main():
         raise RuntimeError("当前无可用 GPU，请先在 AutoDL 控制台以有卡模式开机，再运行同一命令")
     gpu = torch.cuda.get_device_properties(0)
     print(f"GPU：{gpu.name}，显存 {gpu.total_memory / 2**30:.1f} GiB", flush=True)
+    if settings.get("gpu_family") and settings["gpu_family"] not in gpu.name:
+        raise RuntimeError(f"该配置要求{settings['gpu_family']}，当前为{gpu.name}；请选择对应显卡配置")
+    if settings.get("minimum_cuda"):
+        actual = tuple(int(part) for part in (torch.version.cuda or "0.0").split(".")[:2])
+        required = tuple(int(part) for part in settings["minimum_cuda"].split("."))
+        if actual < required:
+            raise RuntimeError(f"该显卡配置需要PyTorch CUDA构建>={settings['minimum_cuda']}，当前为{torch.version.cuda}")
     for model, _, command in commands:
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         if model == "restormer":

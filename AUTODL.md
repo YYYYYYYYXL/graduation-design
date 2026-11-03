@@ -1,5 +1,7 @@
 # AutoDL 4090D 训练
 
+按显卡分开的本地迁移代码、压缩数据和断点见[远程/README.md](远程/README.md)。5090的20/8起始配置及独立batch试测入口在该目录说明中，尚未做5090实测。
+
 项目：`/root/autodl-tmp/graduation-design`。环境：`/root/venvs/denoise`，Python 3.12、PyTorch 2.8.0+cu128。
 
 ## 拿卡后启动

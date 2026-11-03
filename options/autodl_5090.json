@@ -1,0 +1,12 @@
+{
+  "description": "RTX 5090 32GB 待实测起始配置；20/8不是显存或速度上限，先运行probe_restormer.py选择实测配置",
+  "gpu_family": "5090",
+  "minimum_cuda": "12.8",
+  "run_tag": "fast_5090",
+  "output_root": "checkpoints/remote_5090",
+  "workers": 4,
+  "performance": "fast",
+  "models": {
+    "restormer": {"batch_size": 20, "val_batch_size": 8, "epochs": 200, "precision": "amp"}
+  }
+}
