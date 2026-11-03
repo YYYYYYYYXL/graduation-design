@@ -2,6 +2,8 @@
 
 本目录按显卡分开代码与参数，共用一份完整裁剪数据和已有断点。生成代码以此前已同步到服务器的本地训练代码为基础，包含本次5090适配；不是重新从已关机服务器导出的全盘环境。
 
+5090也提供单文件部署包：`5090/5090专用整包_代码数据断点.zip`。只上传这一个ZIP，解压一次即可获得代码、全部裁剪数据及最新两组断点，详见[整包使用说明](5090/整包使用说明.md)。
+
 ```text
 远程/
 ├── 数据/裁剪数据.zip                  # 两个数据集完整train/val/test，无原始大图
@@ -84,5 +86,7 @@ nohup bash run_gpu.sh div2k > logs/restormer_div2k.log 2>&1 < /dev/null &
 ## 重新生成目录与压缩包
 
 请修改项目根目录的源代码与`options/`配置，再运行`build_remote_packages.py`；不要直接修改生成的`代码/`目录。完整训练包不包含Git目录、凭据、原始大图、本地测试结果或第三方预训练成品权重。
+
+已有分包后，运行`python -B build_remote_packages.py --bundle-5090-only`可重新生成5090单文件部署包。
 
 官方兼容性参考：[PyTorch Blackwell/CUDA 12.8支持](https://pytorch.org/blog/pytorch-2-7/)、[PyTorch历史版本安装](https://pytorch.org/get-started/previous-versions/)、[RTX 5090规格](https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/)。
