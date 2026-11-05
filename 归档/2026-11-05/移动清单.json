@@ -1,0 +1,110 @@
+[
+  {
+    "original": "checkpoints/restormer_div2k_fast_4090d",
+    "archived": "归档/2026-11-05/checkpoints/restormer_div2k_fast_4090d"
+  },
+  {
+    "original": "checkpoints/restormer_sidd_scratch",
+    "archived": "归档/2026-11-05/checkpoints/restormer_sidd_scratch"
+  },
+  {
+    "original": "checkpoints/restormer_div2k",
+    "archived": "归档/2026-11-05/checkpoints/restormer_div2k"
+  },
+  {
+    "original": "checkpoints/restormer_div2k_startup_20261101_193820",
+    "archived": "归档/2026-11-05/checkpoints/restormer_div2k_startup_20261101_193820"
+  },
+  {
+    "original": "checkpoints/restormer_official/net_g_best(1).pth",
+    "archived": "归档/2026-11-05/checkpoints/restormer_official/net_g_best(1).pth"
+  },
+  {
+    "original": "checkpoints/dncnn_div2k/last.pth",
+    "archived": "归档/2026-11-05/checkpoints/dncnn_div2k/last.pth"
+  },
+  {
+    "original": "checkpoints/p2n_pretrain/last.pth",
+    "archived": "归档/2026-11-05/checkpoints/p2n_pretrain/last.pth"
+  },
+  {
+    "original": "train_dncnn.py",
+    "archived": "归档/2026-11-05/train_dncnn.py"
+  },
+  {
+    "original": "train_restormer.py",
+    "archived": "归档/2026-11-05/train_restormer.py"
+  },
+  {
+    "original": "train_p2n_pretrain.py",
+    "archived": "归档/2026-11-05/train_p2n_pretrain.py"
+  },
+  {
+    "original": "train_autodl.py",
+    "archived": "归档/2026-11-05/train_autodl.py"
+  },
+  {
+    "original": "training_runtime.py",
+    "archived": "归档/2026-11-05/training_runtime.py"
+  },
+  {
+    "original": "training_utils.py",
+    "archived": "归档/2026-11-05/training_utils.py"
+  },
+  {
+    "original": "probe_restormer.py",
+    "archived": "归档/2026-11-05/probe_restormer.py"
+  },
+  {
+    "original": "prepare_restormer_resume.py",
+    "archived": "归档/2026-11-05/prepare_restormer_resume.py"
+  },
+  {
+    "original": "build_remote_packages.py",
+    "archived": "归档/2026-11-05/build_remote_packages.py"
+  },
+  {
+    "original": "run_5090.sh",
+    "archived": "归档/2026-11-05/run_5090.sh"
+  },
+  {
+    "original": "run_autodl.sh",
+    "archived": "归档/2026-11-05/run_autodl.sh"
+  },
+  {
+    "original": "setup_remote.sh",
+    "archived": "归档/2026-11-05/setup_remote.sh"
+  },
+  {
+    "original": "options",
+    "archived": "归档/2026-11-05/options"
+  },
+  {
+    "original": "AUTODL.md",
+    "archived": "归档/2026-11-05/AUTODL.md"
+  },
+  {
+    "original": "requirements-extra.txt",
+    "archived": "归档/2026-11-05/requirements-extra.txt"
+  },
+  {
+    "original": "requirements-restormer.txt",
+    "archived": "归档/2026-11-05/requirements-restormer.txt"
+  },
+  {
+    "original": "远程",
+    "archived": "归档/2026-11-05/远程"
+  },
+  {
+    "original": "答辩PPT",
+    "archived": "归档/2026-11-05/答辩PPT"
+  },
+  {
+    "original": "开题答辩精简版",
+    "archived": "归档/2026-11-05/开题答辩精简版"
+  },
+  {
+    "original": "目录.md",
+    "archived": "归档/2026-11-05/目录.md"
+  }
+]

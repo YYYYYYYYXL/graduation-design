@@ -1,16 +1,94 @@
 [
-  {"id":"bm3d","name":"BM3D · 彩色去噪","method":"bm3d","path":null,"source":"现有 BM3D 实现","note":"已知 sigma 或仅从噪声图估计，不需要权重。"},
-  {"id":"dncnn_official","name":"DnCNN · 开源彩色盲去噪","method":"dncnn_official","path":"checkpoints/dncnn_official/dncnn_color_blind.pth","source":"https://github.com/cszn/KAIR","note":"作者发布的高斯彩色盲去噪权重，不是本项目 SIDD 自训模型。"},
-  {"id":"dncnn_div2k","name":"DnCNN · 自训 DIV2K","method":"dncnn","path":"checkpoints/dncnn_div2k/best.pth","history":"checkpoints/dncnn_div2k/history.csv","source":"本项目已有权重","note":"保留现有训练成果，不续训。"},
-  {"id":"restormer_gaussian","name":"Restormer · 官方高斯盲去噪","method":"restormer","path":"checkpoints/restormer_official/gaussian_color_denoising_blind.pth","source":"https://github.com/swz30/Restormer","note":"官方预训练；与自训模型分别加载。"},
-  {"id":"restormer_real","name":"Restormer · 官方真实噪声","method":"restormer","path":"checkpoints/restormer_official/real_denoising.pth","source":"https://github.com/swz30/Restormer","note":"官方预训练真实噪声模型。"},
-  {"id":"restormer_sigma25","name":"Restormer · 官方高斯 σ=25","method":"restormer","path":"checkpoints/restormer_official/gaussian_color_denoising_sigma25.pth","source":"https://github.com/swz30/Restormer/releases/tag/v1.0","note":"本次从官方发布页下载，适用于 σ=25 的彩色高斯噪声。"},
-  {"id":"restormer_div2k_cloud","name":"Restormer · 自训 DIV2K（云端）","method":"restormer","path":"checkpoints/restormer_div2k_fast_4090d/best.pth","history":"checkpoints/restormer_div2k_fast_4090d/history.csv","source":"桌面 checkpoints.tar.gz","note":"从压缩包导入现有权重和原始日志。"},
-  {"id":"restormer_div2k_batch16","name":"Restormer · 自训 DIV2K（batch16）","method":"restormer","path":"checkpoints/restormer_div2k_batch16/best.pth","history":"checkpoints/restormer_div2k_batch16/history.csv","source":"桌面 checkpoints.tar.gz / restormer_batch16_20261102","note":"独立保留该批次权重和日志，不覆盖其他版本。"},
-  {"id":"restormer_sidd_batch16","name":"Restormer · 自训 SIDD（云端 batch16）","method":"restormer","path":"checkpoints/restormer_sidd_batch16/best.pth","history":"checkpoints/restormer_sidd_batch16/history.csv","source":"桌面 checkpoints.tar.gz / restormer_batch16_20261102","note":"独立保留该批次权重和日志，不覆盖本地初期快照。"},
-  {"id":"restormer_sidd","name":"Restormer · 自训 SIDD","method":"restormer","path":"checkpoints/restormer_sidd_scratch/best.pth","history":"checkpoints/restormer_sidd_scratch/history.csv","source":"本项目已有权重","note":"使用现有 best.pth；不启动训练。"},
-  {"id":"restormer_imported","name":"Restormer · 导入自训快照","method":"restormer","path":"checkpoints/restormer_official/net_g_best(1).pth","source":"用户已有快照，训练来源待补充","note":"原文件保留；不推断其训练数据或指标。"},
-  {"id":"p2n_div2k","name":"P2N · DIV2K 预训练网络（仅推理）","method":"p2n","path":"checkpoints/p2n_pretrain/best.pth","history":"checkpoints/p2n_pretrain/history.csv","source":"本项目已有权重","note":"禁用单图自监督参数更新；不是完整 P2N 适应实验。"},
-  {"id":"dncnn_sidd","name":"DnCNN · 自训 SIDD（待提供权重）","method":"dncnn","path":"checkpoints/dncnn_sidd/best.pth","source":"尚未提供","note":"缺失时禁用，不用高斯模型冒充 SIDD 模型。"},
-  {"id":"p2n_sidd","name":"P2N · SIDD 预训练网络（待提供权重）","method":"p2n","path":"checkpoints/p2n_pretrain_sidd/best.pth","source":"尚未提供","note":"保留两数据集模型入口，缺失时禁用。"}
+  {
+    "id": "bm3d",
+    "name": "BM3D · 彩色去噪",
+    "method": "bm3d",
+    "path": null,
+    "source": "现有 BM3D 实现",
+    "note": "已知 sigma 或仅从噪声图估计，不需要权重。"
+  },
+  {
+    "id": "dncnn_official",
+    "name": "DnCNN · 开源彩色盲去噪",
+    "method": "dncnn_official",
+    "path": "checkpoints/dncnn_official/dncnn_color_blind.pth",
+    "source": "https://github.com/cszn/KAIR",
+    "note": "作者发布的高斯彩色盲去噪权重，不是本项目 SIDD 自训模型。"
+  },
+  {
+    "id": "dncnn_div2k",
+    "name": "DnCNN · 自训 DIV2K",
+    "method": "dncnn",
+    "path": "checkpoints/dncnn_div2k/best.pth",
+    "history": "checkpoints/dncnn_div2k/history.csv",
+    "source": "本项目已有权重",
+    "note": "保留现有训练成果，不续训。"
+  },
+  {
+    "id": "restormer_gaussian",
+    "name": "Restormer · 官方高斯盲去噪",
+    "method": "restormer",
+    "path": "checkpoints/restormer_official/gaussian_color_denoising_blind.pth",
+    "source": "https://github.com/swz30/Restormer",
+    "note": "官方预训练；与自训模型分别加载。"
+  },
+  {
+    "id": "restormer_real",
+    "name": "Restormer · 官方真实噪声",
+    "method": "restormer",
+    "path": "checkpoints/restormer_official/real_denoising.pth",
+    "source": "https://github.com/swz30/Restormer",
+    "note": "官方预训练真实噪声模型。"
+  },
+  {
+    "id": "restormer_sigma25",
+    "name": "Restormer · 官方高斯 σ=25",
+    "method": "restormer",
+    "path": "checkpoints/restormer_official/gaussian_color_denoising_sigma25.pth",
+    "source": "https://github.com/swz30/Restormer/releases/tag/v1.0",
+    "note": "本次从官方发布页下载，适用于 σ=25 的彩色高斯噪声。"
+  },
+  {
+    "id": "restormer_div2k_batch16",
+    "name": "Restormer · 自训 DIV2K（batch16）",
+    "method": "restormer",
+    "path": "checkpoints/restormer_div2k_batch16/best.pth",
+    "history": "checkpoints/restormer_div2k_batch16/history.csv",
+    "source": "桌面 checkpoints.tar.gz / restormer_batch16_20261102",
+    "note": "当前保留的 DIV2K 自训模型；另一训练批次已归档。"
+  },
+  {
+    "id": "restormer_sidd_batch16",
+    "name": "Restormer · 自训 SIDD（云端 batch16）",
+    "method": "restormer",
+    "path": "checkpoints/restormer_sidd_batch16/best.pth",
+    "history": "checkpoints/restormer_sidd_batch16/history.csv",
+    "source": "桌面 checkpoints.tar.gz / restormer_batch16_20261102",
+    "note": "当前保留的 SIDD 自训模型；本地初期快照已归档。"
+  },
+  {
+    "id": "p2n_div2k",
+    "name": "P2N · DIV2K 预训练网络（仅推理）",
+    "method": "p2n",
+    "path": "checkpoints/p2n_pretrain/best.pth",
+    "history": "checkpoints/p2n_pretrain/history.csv",
+    "source": "本项目已有权重",
+    "note": "禁用单图自监督参数更新；不是完整 P2N 适应实验。"
+  },
+  {
+    "id": "dncnn_sidd",
+    "name": "DnCNN · 自训 SIDD（待提供权重）",
+    "method": "dncnn",
+    "path": "checkpoints/dncnn_sidd/best.pth",
+    "source": "尚未提供",
+    "note": "缺失时禁用，不用高斯模型冒充 SIDD 模型。"
+  },
+  {
+    "id": "p2n_sidd",
+    "name": "P2N · SIDD 预训练网络（待提供权重）",
+    "method": "p2n",
+    "path": "checkpoints/p2n_pretrain_sidd/best.pth",
+    "source": "尚未提供",
+    "note": "保留两数据集模型入口，缺失时禁用。"
+  }
 ]
