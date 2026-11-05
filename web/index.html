@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>清晰 · 图像去噪系统</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<header><a class="brand" href="/">清晰 <span>图像去噪系统</span></a><span class="badge">本地处理 · 原图尺寸</span></header>
+<main>
+  <div class="intro"><p class="eyebrow">IMAGE DENOISING</p><h1>让细节，重新清晰。</h1><p>上传图片，选择已有模型，查看去噪前后的变化。</p></div>
+  <nav aria-label="功能页面"><button class="active" data-tab="normal">普通用户</button><button data-tab="experiment">实验对比</button><button data-tab="models">模型与记录</button><button data-tab="progress">任务进度</button></nav>
+  <section id="workspace">
+    <form id="denoise-form" class="panel">
+      <h2 id="form-title">图片去噪</h2>
+      <label class="upload">选择输入图片<input id="image" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" required><span>PNG / JPEG / WebP / BMP，总上传 ≤ 25 MB，每张 ≤ 400 万像素</span></label>
+      <div class="fields"><label>去噪模型<select id="model"></select></label><label>运行设备<select id="device"><option value="auto">自动选择</option><option value="cpu">CPU</option><option value="cuda">GPU（CUDA）</option></select></label><label>噪声强度 σ<input id="sigma" type="number" min="0" max="255" step="any" placeholder="留空：BM3D 自动估计"></label></div>
+      <p id="model-note" class="muted"></p>
+      <fieldset id="experiment-options" hidden><legend>实验设置</legend><label><input id="synthetic" type="checkbox">将输入视为干净图，生成高斯噪声（原图作为 GT）</label><div class="fields"><label>随机种子<input id="seed" type="number" min="0" max="4294967295" step="1" value="42"></label><label>参考图 GT（可选）<input id="reference" type="file" accept="image/png,image/jpeg,image/webp,image/bmp"></label></div><p class="muted">同尺寸且内容对齐的 GT 才能用于 PSNR / SSIM；没有 GT 时指标显示为未测量。同一组对比共用输入、噪声强度和种子。</p><div id="compare-models" class="checks"></div><label><input id="compare" type="checkbox">依次运行勾选的模型进行对比</label></fieldset>
+      <button id="submit" class="primary" type="submit">开始去噪</button><p id="status" role="status" aria-live="polite"></p>
+    </form>
+    <section class="panel"><div class="section-title"><h2>结果预览</h2><button id="export" disabled>导出本组指标 CSV</button></div><p id="empty" class="muted">结果将在这里显示。去噪不会覆盖上传原图。</p><div id="results"></div></section>
+  </section>
+  <section id="models-panel" class="panel" hidden><h2>模型管理</h2><p class="muted">官方与自训模型独立列出。权重保存在本地，缺失模型不能运行。P2N 当前仅使用预训练网络，不执行单图参数更新。</p><div id="model-cards" class="model-grid"></div><h2>原始训练日志</h2><p id="history-note" class="muted">选择模型的“查看日志”。</p><div id="history" class="table-scroll"></div></section>
+  <section id="progress-panel" class="panel" hidden><h2>任务进度</h2><p class="muted">保留任务清单原有模块、序号、功能点和顺序。原表建议值与当前状态分别显示；代码完成不代表已经完成实验或测试。</p><div id="progress" class="table-scroll"></div></section>
+  <footer>只使用已有权重推理 · 不启动训练 · 实验指标来自当前输入与参考图</footer>
+</main><script src="/static/app.js" defer></script>
+</body></html>

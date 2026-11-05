@@ -1,0 +1,8 @@
+# 复用 denoise310 的 PyTorch；不在此安装或升级 torch。
+Flask>=3.0,<4
+waitress>=3.0,<4
+Pillow>=10.4
+numpy>=1.24,<2
+scikit-image>=0.21
+einops>=0.6,<0.9
+bm3d==4.0.3
