@@ -64,3 +64,11 @@ caption { text-align: left; font-weight: 600; margin-bottom: 8px; }
 th, td { padding: 10px; border-bottom: 1px solid #e0e4e7; }
 th { background: #edf4f4; white-space: nowrap; }
 input[type=radio] { accent-color: #146771; }
+.checks small { display: block; padding-left: 24px; color: #63747c; }
+.metric-guide { background: #edf7f6; padding: 12px 16px; border-radius: 6px; font-size: 14px; }
+.baseline { background: #faf7ed; }
+td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+#detail-panel { border-top: 1px solid #e0e4e7; padding-top: 20px; margin-top: 24px; }
+#detail-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+#detail-grid canvas { width: 100%; max-width: 320px; height: auto; background: #f5f6f7; }
+.links { flex-wrap: wrap; }

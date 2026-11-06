@@ -1,6 +1,7 @@
 """本地图像去噪服务。启动后只执行用户请求的推理，不执行训练。"""
 
 import csv
+import hashlib
 import json
 import math
 import threading
@@ -55,7 +56,7 @@ def history(model_id):
         return jsonify(error="未知模型"), 404
     path = ROOT / item.get("history", "__missing__")
     if not path.is_file():
-        return jsonify(rows=[], note="无本地训练日志；公开预训练模型不生成本项目训练记录。")
+        return jsonify(rows=[], note="该模型目录中没有训练日志。")
     with path.open(encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.DictReader(stream))
     return jsonify(rows=rows, note="原有 CSV 日志，未补写、未伪造。")
@@ -99,12 +100,17 @@ def number(name, default, low, high):
     return value
 
 
-def metrics(image, reference):
+def metrics(image, reference, quality=False):
+    result = dict(psnr=None, ssim=None, brisque=None, estimated_noise=None, quality_notes=[])
     if reference is None:
-        return dict(psnr=None, ssim=None)
+        if quality:
+            from image_quality import no_reference_metrics
+            result.update(no_reference_metrics(image))
+        return result
     # 相同图像 PSNR 为无穷大，避免把 JSON 非有限数字或人为上限当成实测值。
     psnr = "∞" if np.array_equal(image, reference) else calculate_psnr(image, reference)
-    return dict(psnr=psnr, ssim=calculate_ssim(image, reference))
+    result.update(psnr=psnr, ssim=calculate_ssim(image, reference))
+    return result
 
 
 @app.post("/api/denoise")
@@ -133,6 +139,7 @@ def process():
         if seed != int(seed):
             raise ValueError("seed 必须为整数")
         synthetic = request.form.get("synthetic", "false") == "true"
+        experiment = request.form.get("experiment", "false") == "true"
         if synthetic:
             if reference is not None:
                 raise ValueError("合成噪声模式使用上传原图作为 GT，不要额外上传参考图")
@@ -158,7 +165,12 @@ def process():
                       height=pixels.shape[0], original_width=original_size[0], original_height=original_size[1],
                       resized=original_size != (pixels.shape[1], pixels.shape[0]),
                       synthetic=synthetic, seed=int(seed) if synthetic else None,
-                      metrics=metrics(output, reference), input_metrics=metrics(pixels, reference),
+                      metrics=metrics(output, reference, experiment),
+                      input_metrics=metrics(pixels, reference, experiment),
+                      input_sha256=hashlib.sha256(pixels.tobytes()).hexdigest(),
+                      reference_sha256=hashlib.sha256(reference.tobytes()).hexdigest() if reference is not None else None,
+                      metric_mode="reference" if reference is not None else "no_reference" if experiment else "none",
+                      requested_sigma=sigma,
                       reference_provided=reference is not None, **timing)
         result["total_seconds"] = time.perf_counter() - started
         result["note"] = MODELS[model_id]["note"]
@@ -168,8 +180,11 @@ def process():
         result["json_url"] = f"/results/{run_id}/result.json"
         result["csv_url"] = f"/results/{run_id}/metrics.csv"
         (directory / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
-        row = {key: result[key] for key in ("id", "model", "created_at", "width", "height", "original_width", "original_height", "resized", "synthetic", "seed", "device", "seconds", "load_seconds", "total_seconds", "sigma", "tiled")}
+        row = {key: result[key] for key in ("id", "model", "model_name", "created_at", "width", "height", "original_width", "original_height", "resized", "synthetic", "seed", "device", "seconds", "load_seconds", "total_seconds", "sigma", "requested_sigma", "tiled", "parameters", "weights_bytes", "metric_mode", "input_sha256", "reference_sha256")}
         row.update(result["metrics"])
+        row["quality_notes"] = "；".join(result["metrics"]["quality_notes"])
+        row.update({f"input_{key}": value for key, value in result["input_metrics"].items() if key != "quality_notes"})
+        row["input_quality_notes"] = "；".join(result["input_metrics"]["quality_notes"])
         with (directory / "metrics.csv").open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=list(row))
             writer.writeheader()

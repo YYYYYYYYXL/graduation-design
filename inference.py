@@ -11,8 +11,8 @@ from torch.nn import functional as F
 
 ROOT = Path(__file__).resolve().parent
 MODELS = {item["id"]: item for item in json.loads((ROOT / "models.json").read_text(encoding="utf-8"))}
-# 普通照片默认使用已有官方真实噪声模型；实验页面仍可选其他权重。
-DEFAULT_MODEL = "restormer_real"
+# 普通照片使用现有 SIDD 版本；实验页面逐个选择五个模型和 BM3D。
+DEFAULT_MODEL = "restormer_sidd_batch16"
 _cached_key = None
 _cached_model = None
 
@@ -34,11 +34,12 @@ def load_model(item, device):
         torch.cuda.empty_cache()
     method = item["method"]
     if method == "dncnn":
-        from dncnn.model import load_trained
-        model = load_trained(path, device)
-    elif method == "dncnn_official":
-        from dncnn.pretrained import load_pretrained
-        model = load_pretrained(path, device)
+        if item.get("weights_format") == "fused_bn":
+            from dncnn.pretrained import load_pretrained
+            model = load_pretrained(path, device)
+        else:
+            from dncnn.model import load_trained
+            model = load_trained(path, device)
     elif method == "p2n":
         from p2n.model import load_pretrained
         model = load_pretrained(path, device)
@@ -94,7 +95,8 @@ def denoise(model_id, input_path, output_path, sigma=None, device="auto"):
     if item["method"] == "bm3d":
         from denoise_bm3d import denoise as bm3d_denoise
         actual_sigma, seconds = bm3d_denoise(input_path, output_path, sigma, verbose=False)
-        return dict(seconds=seconds, load_seconds=0, device="cpu", sigma=actual_sigma, tiled=False)
+        return dict(seconds=seconds, load_seconds=0, device="cpu", sigma=actual_sigma,
+                    tiled=False, parameters=None, weights_bytes=0)
     if not (ROOT / item["path"]).is_file():
         raise ValueError("该模型权重尚未提供")
     started = time.perf_counter()
@@ -111,4 +113,6 @@ def denoise(model_id, input_path, output_path, sigma=None, device="auto"):
     seconds = time.perf_counter() - started
     Image.fromarray(output).save(output_path)
     return dict(seconds=seconds, load_seconds=load_seconds, device=device, sigma=sigma,
-                tiled=max(pixels.shape[:2]) > 256)
+                tiled=max(pixels.shape[:2]) > 256,
+                parameters=sum(parameter.numel() for parameter in model.parameters()),
+                weights_bytes=(ROOT / item["path"]).stat().st_size)

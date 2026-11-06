@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 let models = [], tab = 'normal', results = [], defaultModel = '', previewUrl = '', validImage = false;
-const methods = {dncnn_div2k: 'DnCNN · 自训 DIV2K', restormer_real: 'Restormer · 官方真实噪声', p2n_div2k: 'P2N · 预训练推理', bm3d: 'BM3D'};
+let detailImages = [];
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 async function api(url, options) {
   const response = await fetch(url, options);
@@ -15,6 +15,8 @@ function clearResults() {
   $('shared-input').hidden = true; $('comparison-summary').hidden = true;
   $('result-panel').hidden = true; $('export').disabled = true;
   $('status').textContent = '';
+  detailImages = []; $('detail-grid').replaceChildren(); $('detail-panel').hidden = true;
+  $('detail-panel').open = false;
 }
 function selectTab(next) {
   if (tab !== next) clearResults();
@@ -38,11 +40,19 @@ function updateMode() {
   $('reference-options').hidden = clean; $('reference').disabled = clean;
   $('sigma-field').hidden = clean; $('sigma').disabled = clean;
   $('seed-field').hidden = !clean; $('seed').disabled = !clean;
+  updateMetricGuide();
   updateSubmit();
+}
+function updateMetricGuide() {
+  const paired = $('synthetic').checked || $('reference').files.length > 0;
+  $('metric-guide').textContent = paired
+    ? '本次看还原准确度：PSNR、SSIM 越高通常越接近干净图，同时比较用时和局部细节。'
+    : '本次看无参考质量：BRISQUE 越低通常越好。噪声估计仅作辅助，变糊也可能让噪声数值变低；请结合放大图判断。';
 }
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
 document.querySelectorAll('[name="input-mode"]').forEach(radio => radio.onchange = () => { clearResults(); updateMode(); });
-$('clear-reference').onclick = () => { $('reference').value = ''; };
+$('clear-reference').onclick = () => { $('reference').value = ''; clearResults(); updateMetricGuide(); };
+$('reference').onchange = () => { clearResults(); updateMetricGuide(); };
 function imageFigure(label, url) {
   const figure = node('figure'), link = node('a'), img = node('img');
   link.href = url; link.target = '_blank'; link.rel = 'noopener';
@@ -52,21 +62,31 @@ function imageFigure(label, url) {
 function showSummary() {
   const first = results[0], hasReference = first.reference_provided;
   const summary = $('comparison-summary'); summary.replaceChildren(); summary.hidden = false;
-  summary.append(node('p', hasReference ? 'PSNR、SSIM 越高，通常越接近参考图；仍需结合纹理和细节判断。' : '没有干净参考图，本次只比较图片效果和用时，不计算 PSNR、SSIM。', 'muted'));
+  summary.append(node('p', hasReference ? 'PSNR、SSIM ↑：越高通常越接近参考图。先与“去噪前”比较，再看各模型的结果。' : 'BRISQUE ↓：0～100，越低通常表示感知质量越好，不是准确率。噪声估计是辅助数值，不能单凭它判断谁更好。', 'metric-guide'));
+  summary.append(node('p', `本次处理 ${first.width} × ${first.height} 像素 · ${first.synthetic ? `合成高斯噪声 σ=${first.requested_sigma} · 随机种子 ${first.seed}` : '上传的带噪照片，未额外加噪'}${first.resized ? ` · 原图 ${first.original_width} × ${first.original_height} 已缩小，指标针对缩小后的图片` : ''}`, 'muted'));
   const wrapper = node('div', undefined, 'table-scroll'), table = node('table');
   const caption = node('caption', '本次对比汇总'); table.append(caption);
   const head = node('thead'), heading = node('tr');
-  const labels = ['方法', ...(hasReference ? ['PSNR (dB)', 'SSIM'] : []), '处理用时 (s)'];
+  const labels = ['模型 / 方法', ...(hasReference ? ['PSNR ↑ (dB)', 'SSIM ↑'] : ['BRISQUE ↓', '噪声估计（辅助）']), '去噪 (s)', '加载 (s)', '总处理 (s)', '参数量 (M)', '设备'];
   labels.forEach(label => { const th = node('th', label); th.scope = 'col'; heading.append(th); });
   head.append(heading); table.append(head);
   const body = node('tbody');
+  const scores = value => hasReference ? [format(value.psnr), format(value.ssim, 4)] : [format(value.brisque, 2), format(value.estimated_noise, 2)];
+  const baseline = node('tr', undefined, 'baseline');
+  ['去噪前 · 原始输入', ...scores(first.input_metrics), '—', '—', '—', '—', '—'].forEach(v => baseline.append(node('td', v)));
+  body.append(baseline);
   results.forEach(r => {
     const row = node('tr');
-    [r.model_name, ...(hasReference ? [format(r.metrics.psnr), format(r.metrics.ssim, 4)] : []), format(r.total_seconds)].forEach(v => row.append(node('td', v)));
+    [r.model_name, ...scores(r.metrics), format(r.seconds), format(r.load_seconds), format(r.total_seconds), r.parameters === null ? '不适用' : format(r.parameters / 1e6), r.device.toUpperCase()].forEach(v => row.append(node('td', v)));
     body.append(row);
   });
   table.append(body); wrapper.append(table); summary.append(wrapper);
-  summary.append(node('p', '用时包含图片读写和模型加载，首次使用通常更慢。点击图片可查看原图。' + (results.some(r => r.tiled) ? '部分结果采用分块处理，指标可能与整图不同。' : ''), 'muted'));
+  const help = node('details'); help.append(node('summary', '怎么看这些指标和用时？'));
+  help.append(node('p', '总处理时间包含读写、加载、去噪和评分，不含上传传输；加载受缓存影响。BM3D 去噪用时包含噪声估计，神经网络包含分块和设备传输；CPU 与 GPU 速度不能直接当作算法优劣。参数量单位 M 是百万个参数，表示网络规模，不代表质量或内存占用。' + (results.some(r => r.tiled) ? '部分结果使用分块推理。' : ''), 'muted'));
+  help.append(node('p', '这张图的结果不代表所有照片。可以比较同一网络的 DIV2K 与 SIDD 两个版本，但差异也受训练设置影响；也可以比较五个模型与 BM3D。P2N 为现有网络直接推理。', 'muted'));
+  summary.append(help);
+  const notes = [...first.input_metrics.quality_notes.map(note => `去噪前：${note}`), ...results.flatMap(r => r.metrics.quality_notes.map(note => `${r.model_name}：${note}`))];
+  notes.forEach(note => summary.append(node('p', note, 'muted')));
 }
 function format(value, digits = 3) { return value === null || value === undefined ? '未测量' : typeof value === 'number' ? value.toFixed(digits) : value; }
 function addResult(result) {
@@ -78,8 +98,13 @@ function addResult(result) {
     if (results.length === 1) {
       $('shared-input').hidden = false;
       $('shared-input').append(imageFigure('共同输入 · 带噪照片', result.input_url));
-      if (result.reference_url) $('shared-input').append(imageFigure('干净参考图', result.reference_url));
+      addDetailImage('去噪前', result.input_url);
+      if (result.reference_url) {
+        $('shared-input').append(imageFigure('干净参考图', result.reference_url));
+        addDetailImage('干净参考图', result.reference_url);
+      }
     }
+    addDetailImage(result.model_name, result.output_url);
     showSummary();
   }
   const images = node('div', undefined, 'images');
@@ -87,8 +112,38 @@ function addResult(result) {
   images.append(imageFigure('去噪结果', result.output_url)); article.append(images);
   const links = node('div', undefined, 'links');
   const a = node('a', '下载图片'); a.href = result.output_url + '?download=1'; a.download = ''; links.append(a);
+  if (experiment) {
+    const record = node('a', '完整参数 JSON'); record.href = result.json_url; links.append(record);
+    const info = node('p', `权重文件 ${format(result.weights_bytes / 1024 ** 2, 2)} MiB · ${result.tiled ? '分块推理' : '整图推理'}${result.model === 'bm3d' ? ` · 实际噪声强度 σ=${format(result.sigma, 2)}` : ''}`, 'muted');
+    article.append(info);
+  }
   article.append(links); $('results').append(article);
 }
+function addDetailImage(label, url) {
+  const figure = node('figure'), canvas = node('canvas'), img = new Image();
+  canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', `${label}的局部放大`);
+  figure.append(node('figcaption', label), canvas); $('detail-grid').append(figure);
+  const item = {img, canvas, ready: false}; detailImages.push(item);
+  img.onload = () => { item.ready = true; if ($('detail-panel').open) drawDetails(); };
+  img.onerror = () => figure.append(node('p', '图片加载失败，可点击上方图片重新查看。', 'error'));
+  img.src = url; $('detail-panel').hidden = false;
+}
+function drawDetails() {
+  if (!results.length) return;
+  const {width, height} = results[0];
+  const size = Math.min(Number($('detail-size').value), width, height);
+  const left = Math.round((width - size) * Number($('detail-x').value) / 100);
+  const top = Math.round((height - size) * Number($('detail-y').value) / 100);
+  $('detail-location').textContent = `区域左上角 (${left}, ${top})，取 ${size} × ${size} 个原始像素，同倍数放大。`;
+  detailImages.forEach(({img, canvas, ready}) => {
+    if (!ready) return;
+    canvas.width = 320; canvas.height = 320;
+    const context = canvas.getContext('2d'); context.imageSmoothingEnabled = false;
+    context.drawImage(img, left, top, size, size, 0, 0, 320, 320);
+  });
+}
+['detail-x', 'detail-y', 'detail-size'].forEach(id => $(id).oninput = drawDetails);
+$('detail-panel').ontoggle = () => { if ($('detail-panel').open) drawDetails(); };
 $('denoise-form').onsubmit = async event => {
   event.preventDefault();
   if (!validImage) return;
@@ -97,7 +152,8 @@ $('denoise-form').onsubmit = async event => {
   const clean = experiment && $('synthetic').checked;
   if (!ids.length) { $('status').textContent = '请至少选择一个模型'; return; }
   if (experiment && $('image').files[0].size + (!clean ? $('reference').files[0]?.size || 0 : 0) > 50 * 1024 * 1024) { $('status').textContent = '图片合计不能超过 50 MB。'; return; }
-  const form = new FormData(); form.set('image', $('image').files[0]); form.set('device', 'auto'); form.set('sigma', experiment ? (clean ? $('noise-level').value : $('sigma').value) : '');
+  const form = new FormData(); form.set('image', $('image').files[0]); form.set('device', experiment ? $('device').value : 'auto'); form.set('sigma', experiment ? (clean ? $('noise-level').value : $('sigma').value) : '');
+  form.set('experiment', String(experiment));
   form.set('synthetic', String(clean)); form.set('seed', clean ? $('seed').value : '42');
   if (experiment && !clean && $('reference').files.length) form.set('reference', $('reference').files[0]);
   const controls = [...document.querySelectorAll('form input, form select, form button, nav button')];
@@ -109,15 +165,22 @@ $('denoise-form').onsubmit = async event => {
       const label = models.find(m => m.id === id).name;
       $('status').textContent = experiment ? `正在处理 ${index + 1}/${ids.length}：${label}` : '正在去噪，请稍候…';
       form.set('model', id);
-      try { const result = await api('/api/denoise', {method: 'POST', body: form}); results.push(result); addResult(result); }
+      try {
+        const result = await api('/api/denoise', {method: 'POST', body: form});
+        if (results.length && (result.input_sha256 !== results[0].input_sha256 || result.reference_sha256 !== results[0].reference_sha256 || result.width !== results[0].width || result.height !== results[0].height)) throw new Error('输入或参考图与本组不一致，不能合并比较，请重新开始。');
+        results.push(result); addResult(result);
+      }
       catch (error) { errors.push(`${label}：${error.message}`); $('results').append(node('p', errors.at(-1), 'error')); }
     }
-    $('status').textContent = errors.length ? `成功 ${results.length} 项，失败 ${errors.length} 项，原因见下方。` : experiment ? `已完成 ${results.length} 个模型的对比。` : '去噪完成。';
+    $('status').textContent = errors.length ? `成功 ${results.length} 项，失败 ${errors.length} 项，原因见下方。` : experiment ? `已完成 ${results.length} 项对比。` : '去噪完成。';
     $('status').className = errors.length ? 'error' : '';
   } finally { controls.forEach((c, i) => c.disabled = disabled[i]); $('export').disabled = !results.length; updateSubmit(); }
 };
 $('export').onclick = () => {
-  const rows = [['model', 'psnr', 'ssim', 'seconds', 'load_seconds', 'total_seconds', 'device', 'sigma', 'seed', 'tiled', 'run_id', 'original_width', 'original_height', 'width', 'height', 'resized'], ...results.map(r => [r.model, r.metrics.psnr, r.metrics.ssim, r.seconds, r.load_seconds, r.total_seconds, r.device, r.sigma, r.seed, r.tiled, r.id, r.original_width, r.original_height, r.width, r.height, r.resized])];
+  const fields = ['model', 'model_name', 'metric_mode', 'psnr', 'ssim', 'brisque', 'estimated_noise', 'quality_notes', 'seconds', 'load_seconds', 'total_seconds', 'parameters', 'weights_bytes', 'device', 'sigma', 'requested_sigma', 'synthetic', 'seed', 'tiled', 'id', 'created_at', 'original_width', 'original_height', 'width', 'height', 'resized', 'input_sha256', 'reference_sha256'];
+  const first = results[0];
+  const baseline = {...first, ...first.input_metrics, model: 'input', model_name: '去噪前', seconds: null, load_seconds: null, total_seconds: null, parameters: null, weights_bytes: null, device: null, sigma: null, tiled: null};
+  const rows = [fields, ...[baseline, ...results.map(r => ({...r, ...r.metrics}))].map(r => fields.map(key => Array.isArray(r[key]) ? r[key].join('；') : r[key]))];
   const csv = '\ufeff' + rows.map(row => row.map(v => `"${String(v ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
   const a = node('a'); a.href = url; a.download = 'denoising_comparison.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -125,12 +188,14 @@ $('export').onclick = () => {
 async function init() {
   const [available, settings] = await Promise.all([api('/api/models'), api('/api/settings')]);
   models = available; defaultModel = settings.default_model;
-  models.filter(model => model.available).forEach(model => {
+  models.forEach(model => {
     const label = node('label'), check = node('input');
     check.type = 'checkbox'; check.className = 'compare-item'; check.value = model.id;
-    check.checked = Object.hasOwn(methods, model.id);
-    label.append(check, document.createTextNode(methods[model.id] || model.name));
-    $(Object.hasOwn(methods, model.id) ? 'compare-models' : 'more-models').append(label);
+    check.checked = model.available; check.disabled = !model.available;
+    label.append(check, document.createTextNode(model.name));
+    if (!model.available) label.append(node('small', '权重文件缺失，暂不可用'));
+    else if (model.id === 'p2n_div2k') label.append(node('small', '使用现有网络直接推理'));
+    $('compare-models').append(label);
     check.onchange = updateSubmit;
   });
   selectTab(tab);
@@ -141,7 +206,7 @@ init().catch(error => { $('status').className = 'error'; $('status').textContent
 function updateSubmit() {
   const count = document.querySelectorAll('.compare-item:checked').length;
   $('submit').disabled = !validImage || (tab === 'experiment' ? !count : !models.some(m => m.id === defaultModel && m.available));
-  $('submit').textContent = tab === 'experiment' ? (count ? `开始对比（${count} 种）` : '请至少选择一种方法') : '开始去噪';
+  $('submit').textContent = tab === 'experiment' ? (count ? `开始对比（${count} 项）` : '请至少选择一种方法') : '开始去噪';
 }
 $('image').onchange = async () => {
   validImage = false; updateSubmit();
