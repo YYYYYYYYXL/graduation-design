@@ -72,6 +72,7 @@ function format(value, digits = 3) { return value === null || value === undefine
 function addResult(result) {
   const experiment = tab === 'experiment';
   const article = node('article', undefined, 'result');
+  if (result.resized) article.append(node('p', `原图 ${result.original_width} × ${result.original_height}，已等比例缩小至 ${result.width} × ${result.height}；下载图片为此尺寸。`, 'muted'));
   if (experiment) {
     article.append(node('h3', result.model_name));
     if (results.length === 1) {
@@ -95,7 +96,7 @@ $('denoise-form').onsubmit = async event => {
   const ids = experiment ? [...document.querySelectorAll('.compare-item:checked')].map(c => c.value) : [defaultModel];
   const clean = experiment && $('synthetic').checked;
   if (!ids.length) { $('status').textContent = '请至少选择一个模型'; return; }
-  if (experiment && $('image').files[0].size + (!clean ? $('reference').files[0]?.size || 0 : 0) > 25 * 1024 * 1024) { $('status').textContent = '图片合计不能超过 25 MB。'; return; }
+  if (experiment && $('image').files[0].size + (!clean ? $('reference').files[0]?.size || 0 : 0) > 50 * 1024 * 1024) { $('status').textContent = '图片合计不能超过 50 MB。'; return; }
   const form = new FormData(); form.set('image', $('image').files[0]); form.set('device', 'auto'); form.set('sigma', experiment ? (clean ? $('noise-level').value : $('sigma').value) : '');
   form.set('synthetic', String(clean)); form.set('seed', clean ? $('seed').value : '42');
   if (experiment && !clean && $('reference').files.length) form.set('reference', $('reference').files[0]);
@@ -116,7 +117,7 @@ $('denoise-form').onsubmit = async event => {
   } finally { controls.forEach((c, i) => c.disabled = disabled[i]); $('export').disabled = !results.length; updateSubmit(); }
 };
 $('export').onclick = () => {
-  const rows = [['model', 'psnr', 'ssim', 'seconds', 'load_seconds', 'total_seconds', 'device', 'sigma', 'seed', 'tiled', 'run_id'], ...results.map(r => [r.model, r.metrics.psnr, r.metrics.ssim, r.seconds, r.load_seconds, r.total_seconds, r.device, r.sigma, r.seed, r.tiled, r.id])];
+  const rows = [['model', 'psnr', 'ssim', 'seconds', 'load_seconds', 'total_seconds', 'device', 'sigma', 'seed', 'tiled', 'run_id', 'original_width', 'original_height', 'width', 'height', 'resized'], ...results.map(r => [r.model, r.metrics.psnr, r.metrics.ssim, r.seconds, r.load_seconds, r.total_seconds, r.device, r.sigma, r.seed, r.tiled, r.id, r.original_width, r.original_height, r.width, r.height, r.resized])];
   const csv = '\ufeff' + rows.map(row => row.map(v => `"${String(v ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
   const a = node('a'); a.href = url; a.download = 'denoising_comparison.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -146,23 +147,28 @@ $('image').onchange = async () => {
   validImage = false; updateSubmit();
   $('selection-error').textContent = ''; $('status').textContent = '';
   clearResults();
-  $('preview').hidden = true;
+  $('preview').hidden = true; $('preview-image').hidden = false;
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = '';
   const file = $('image').files[0];
   if (!file) return;
-  if (file.size > 25 * 1024 * 1024) { $('selection-error').textContent = '图片不能超过 25 MB。'; return; }
+  if (file.size > 50 * 1024 * 1024) { $('selection-error').textContent = '图片不能超过 50 MB。'; return; }
   const url = URL.createObjectURL(file); previewUrl = url;
   const img = new Image(); img.src = url;
   try {
     await img.decode();
     if (previewUrl !== url) return;
-    if (Math.min(img.naturalWidth, img.naturalHeight) < 11 || img.naturalWidth * img.naturalHeight > 4000000) throw new Error('图片每边至少 11 像素，总像素不超过 400 万。');
+    if (Math.min(img.naturalWidth, img.naturalHeight) < 11 || img.naturalWidth * img.naturalHeight > 100000000) throw new Error('图片每边至少 11 像素，原图总像素不超过 1 亿。');
     $('preview-image').src = url;
-    $('file-info').textContent = `${file.name} · ${img.naturalWidth} × ${img.naturalHeight}`;
+    $('file-info').textContent = `${file.name} · ${img.naturalWidth} × ${img.naturalHeight}${img.naturalWidth * img.naturalHeight > 4000000 ? " · 大图将自动缩小后去噪" : ""}`;
     $('preview').hidden = false; validImage = true;
   } catch (error) {
-    if (previewUrl === url) $('selection-error').textContent = error.message.startsWith('图片') ? error.message : '无法读取图片，请选择 PNG、JPG、WebP 或 BMP 文件。';
+    if (previewUrl !== url) return;
+    if (/\.hei[cf]$/i.test(file.name) || /^image\/hei[cf]/i.test(file.type)) {
+      $('preview-image').hidden = true; $('preview').hidden = false;
+      $('file-info').textContent = `${file.name} · 浏览器无法预览此格式，可以直接开始处理；系统会读取照片并自动调整大图尺寸。`;
+      validImage = true;
+    } else $('selection-error').textContent = error.message.startsWith('图片') ? error.message : '无法读取图片，请选择 JPG、PNG、WebP、BMP 或 HEIC/HEIF 文件。';
   }
   updateSubmit();
 };

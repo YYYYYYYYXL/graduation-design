@@ -11,16 +11,20 @@ from datetime import datetime, timezone
 import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
 from PIL import Image, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 from werkzeug.exceptions import HTTPException
 
 from denoising_metrics import calculate_psnr, calculate_ssim
 from inference import DEFAULT_MODEL, MODELS, ROOT, denoise, model_list
 
+register_heif_opener()
 app = Flask(__name__, static_folder="web", static_url_path="/static")
-app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 OUTPUT = ROOT / "results/web"
 INFERENCE_LOCK = threading.Lock()
 MAX_PIXELS = 4_000_000
+MAX_INPUT_PIXELS = 100_000_000
+Image.MAX_IMAGE_PIXELS = MAX_INPUT_PIXELS
 
 
 @app.get("/")
@@ -35,7 +39,7 @@ def models():
 
 @app.get("/api/settings")
 def settings():
-    return jsonify(default_model=DEFAULT_MODEL, max_pixels=MAX_PIXELS,
+    return jsonify(default_model=DEFAULT_MODEL, max_pixels=MAX_PIXELS, max_input_pixels=MAX_INPUT_PIXELS,
                    max_upload_bytes=app.config["MAX_CONTENT_LENGTH"])
 
 
@@ -62,17 +66,24 @@ def read_image(upload):
         raise ValueError("请选择图片")
     try:
         with Image.open(upload.stream) as image:
-            if image.format not in ("PNG", "JPEG", "WEBP", "BMP"):
-                raise ValueError("仅支持 PNG、JPEG、WebP 和 BMP")
-            if image.width * image.height > MAX_PIXELS or min(image.size) < 11:
-                raise ValueError("图片每边至少 11 像素，总像素不能超过 400 万")
+            if image.format not in ("PNG", "JPEG", "WEBP", "BMP", "HEIF"):
+                raise ValueError("仅支持 PNG、JPEG、WebP、BMP、HEIC 和 HEIF")
+            if image.width * image.height > MAX_INPUT_PIXELS or min(image.size) < 11:
+                raise ValueError("图片每边至少 11 像素，原图总像素不能超过 1 亿")
             image = ImageOps.exif_transpose(image)
+            original_size = image.size
+            if image.width * image.height > MAX_PIXELS:
+                scale = math.sqrt(MAX_PIXELS / (image.width * image.height))
+                size = (max(1, int(image.width * scale)), max(1, int(image.height * scale)))
+                if min(size) < 11:
+                    raise ValueError("图片过于狭长，缩小后无法处理，请先裁剪")
+                image = image.resize(size, Image.Resampling.LANCZOS)
             # 透明图像统一合成至白底，避免透明区域变黑。
             if image.mode in ("RGBA", "LA") or "transparency" in image.info:
                 rgba = image.convert("RGBA")
                 background = Image.new("RGBA", rgba.size, "white")
                 image = Image.alpha_composite(background, rgba)
-            return np.array(image.convert("RGB"))
+            return np.array(image.convert("RGB")), original_size
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
         raise ValueError("无法读取图片或图片尺寸过大") from exc
 
@@ -111,8 +122,12 @@ def process():
         device = request.form.get("device", "auto")
         if device not in ("auto", "cpu", "cuda"):
             raise ValueError("无效的运行设备")
-        pixels = read_image(request.files.get("image"))
-        reference = read_image(request.files["reference"]) if request.files.get("reference") else None
+        pixels, original_size = read_image(request.files.get("image"))
+        reference = None
+        if request.files.get("reference"):
+            reference, reference_size = read_image(request.files["reference"])
+            if reference_size != original_size:
+                raise ValueError("参考图与输入原图尺寸必须相同且内容对齐")
         sigma = number("sigma", None, 0, 255)
         seed = number("seed", 42, 0, 2**32-1)
         if seed != int(seed):
@@ -127,7 +142,7 @@ def process():
             noise = np.random.default_rng(int(seed)).normal(0, sigma, pixels.shape)
             pixels = np.rint(np.clip(pixels.astype(np.float32) + noise, 0, 255)).astype(np.uint8)
         if reference is not None and reference.shape != pixels.shape:
-            raise ValueError("参考图与输入图尺寸必须相同且内容对齐；系统不会自动缩放参考图")
+            raise ValueError("参考图与输入图尺寸必须相同且内容对齐")
         run_id = uuid.uuid4().hex
         directory = OUTPUT / run_id
         directory.mkdir(parents=True)
@@ -140,7 +155,9 @@ def process():
             output = np.array(image)
         result = dict(id=run_id, model=model_id, model_name=MODELS[model_id]["name"],
                       created_at=datetime.now(timezone.utc).isoformat(), width=pixels.shape[1],
-                      height=pixels.shape[0], synthetic=synthetic, seed=int(seed) if synthetic else None,
+                      height=pixels.shape[0], original_width=original_size[0], original_height=original_size[1],
+                      resized=original_size != (pixels.shape[1], pixels.shape[0]),
+                      synthetic=synthetic, seed=int(seed) if synthetic else None,
                       metrics=metrics(output, reference), input_metrics=metrics(pixels, reference),
                       reference_provided=reference is not None, **timing)
         result["total_seconds"] = time.perf_counter() - started
@@ -151,7 +168,7 @@ def process():
         result["json_url"] = f"/results/{run_id}/result.json"
         result["csv_url"] = f"/results/{run_id}/metrics.csv"
         (directory / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
-        row = {key: result[key] for key in ("id", "model", "created_at", "width", "height", "synthetic", "seed", "device", "seconds", "load_seconds", "total_seconds", "sigma", "tiled")}
+        row = {key: result[key] for key in ("id", "model", "created_at", "width", "height", "original_width", "original_height", "resized", "synthetic", "seed", "device", "seconds", "load_seconds", "total_seconds", "sigma", "tiled")}
         row.update(result["metrics"])
         with (directory / "metrics.csv").open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=list(row))
@@ -176,7 +193,7 @@ def result_file(run_id, filename):
 @app.errorhandler(Exception)
 def handle_error(error):
     if isinstance(error, HTTPException):
-        message = "上传文件合计不能超过 25 MB" if error.code == 413 else error.description
+        message = "上传文件合计不能超过 50 MB" if error.code == 413 else error.description
         return jsonify(error=message), error.code
     if isinstance(error, ValueError):
         return jsonify(error=str(error)), 400
@@ -187,4 +204,4 @@ def handle_error(error):
 if __name__ == "__main__":
     from waitress import serve
     print("图像去噪系统：http://127.0.0.1:5000", flush=True)
-    serve(app, host="127.0.0.1", port=5000, threads=4, max_request_body_size=25 * 1024 * 1024)
+    serve(app, host="127.0.0.1", port=5000, threads=4, max_request_body_size=app.config["MAX_CONTENT_LENGTH"])
