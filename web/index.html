@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>图像去噪系统</title><link rel="stylesheet" href="/static/style.css?v=6"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>图像去噪系统</title><link rel="stylesheet" href="/static/style.css?v=9"></head>
 <body>
 <header><a class="brand" href="/">图像去噪系统</a><nav aria-label="功能页面"><button class="active" data-tab="normal">图片去噪</button><button data-tab="experiment">实验对比</button></nav></header>
 <main>
@@ -11,6 +11,7 @@
 <div class="mode-options"><label><input type="radio" name="input-mode" value="noisy" checked>我有带噪照片<small>直接去噪；有参考图看还原程度，没有则看图片质量评分。</small></label><label><input id="synthetic" type="radio" name="input-mode" value="clean">我有清晰照片<small>先添加同一份噪声，再比较谁更接近原图。</small></label></div>
 </fieldset>
 <label class="upload"><span id="upload-label">上传图片</span><input id="image" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/heic,image/heif,.heic,.heif" required><span>支持手机 JPG、HEIC/HEIF，以及 PNG、WebP、BMP；合计最多 50 MB。大图自动等比例缩小到 400 万像素以内，下载的是处理后的尺寸。</span></label>
+<button id="clear-image" class="remove-image" type="button" hidden>移除上传图片</button>
 <figure id="preview" hidden><img id="preview-image" alt="待处理的照片"><figcaption id="file-info"></figcaption></figure>
 <fieldset id="experiment-options" hidden disabled><legend>2 · 选择要比较的方法</legend>
 <p class="muted">五个模型加 BM3D，共六个对比选项。每项单独出结果，使用同一张带噪图；可取消不需要的，选得越多等待越久。</p>
@@ -26,5 +27,5 @@
 </section>
 </section>
 
-</main><script src="/static/app.js?v=8" defer></script>
+</main><script src="/static/app.js?v=9" defer></script>
 </body></html>

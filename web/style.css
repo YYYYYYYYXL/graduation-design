@@ -72,3 +72,6 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 #detail-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
 #detail-grid canvas { width: 100%; max-width: 320px; height: auto; background: #f5f6f7; }
 .links { flex-wrap: wrap; }
+.image-caption { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.remove-image { padding: 5px 10px; font-size: 13px; }
+#clear-image { margin-top: 12px; }

@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 let models = [], tab = 'normal', results = [], defaultModel = '', previewUrl = '', validImage = false;
 let detailImages = [];
+let processing = false;
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 async function api(url, options) {
   const response = await fetch(url, options);
@@ -51,11 +52,49 @@ document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => selectTab
 document.querySelectorAll('[name="input-mode"]').forEach(radio => radio.onchange = () => { clearResults(); updateMode(); });
 $('clear-reference').onclick = () => { $('reference').value = ''; clearResults(); updateMetricGuide(); };
 $('reference').onchange = () => { clearResults(); updateMetricGuide(); };
-function imageFigure(label, url) {
+$('clear-image').onclick = () => {
+  if (processing) return;
+  $('image').value = ''; validImage = false;
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = ''; $('preview-image').removeAttribute('src');
+  $('preview').hidden = true; $('clear-image').hidden = true;
+  $('file-info').textContent = ''; $('selection-error').textContent = '';
+  clearResults(); updateSubmit();
+};
+function removeButton(label, action) {
+  const button = node('button', '移除图片', 'remove-image');
+  button.type = 'button'; button.disabled = processing;
+  button.setAttribute('aria-label', `移除${label}`);
+  button.onclick = () => { if (!processing) action(); };
+  return button;
+}
+function removeImageViews(url) {
+  document.querySelectorAll('figure[data-image-url]').forEach(figure => {
+    if (figure.dataset.imageUrl === url) figure.remove();
+  });
+  detailImages = detailImages.filter(item => item.url !== url);
+  $('detail-panel').hidden = !detailImages.length;
+  $('shared-input').hidden = !$('shared-input').children.length;
+}
+function removeResult(result) {
+  removeImageViews(result.output_url);
+  document.querySelectorAll('article[data-result-id]').forEach(article => {
+    if (article.dataset.resultId === result.id) article.remove();
+  });
+  results = results.filter(item => item.id !== result.id);
+  if (!results.length) clearResults();
+  else if (tab === 'experiment') showSummary();
+  $('status').textContent = results.length ? `当前保留 ${results.length} 项结果。` : '已移除结果，可重新开始去噪。';
+  $('export').disabled = !results.length;
+}
+function imageFigure(label, url, onRemove = () => removeImageViews(url)) {
   const figure = node('figure'), link = node('a'), img = node('img');
+  figure.dataset.imageUrl = url;
   link.href = url; link.target = '_blank'; link.rel = 'noopener';
   img.src = url; img.alt = label; img.loading = 'lazy';
-  link.append(img); figure.append(node('figcaption', label), link); return figure;
+  const caption = node('figcaption', undefined, 'image-caption');
+  caption.append(node('span', label), removeButton(label, onRemove));
+  link.append(img); figure.append(caption, link); return figure;
 }
 function showSummary() {
   const first = results[0], hasReference = first.reference_provided;
@@ -90,6 +129,7 @@ function format(value, digits = 3) { return value === null || value === undefine
 function addResult(result) {
   const experiment = tab === 'experiment';
   const article = node('article', undefined, 'result');
+  article.dataset.resultId = result.id;
   if (result.resized) article.append(node('p', `原图 ${result.original_width} × ${result.original_height}，已等比例缩小至 ${result.width} × ${result.height}；下载图片为此尺寸。`, 'muted'));
   if (experiment) {
     article.append(node('h3', result.model_name));
@@ -102,12 +142,12 @@ function addResult(result) {
         addDetailImage('干净参考图', result.reference_url);
       }
     }
-    addDetailImage(result.model_name, result.output_url);
+    addDetailImage(result.model_name, result.output_url, () => removeResult(result));
     showSummary();
   }
   const images = node('div', undefined, 'images');
   if (!experiment) images.append(imageFigure('输入图', result.input_url));
-  images.append(imageFigure('去噪结果', result.output_url)); article.append(images);
+  images.append(imageFigure('去噪结果', result.output_url, () => removeResult(result))); article.append(images);
   const links = node('div', undefined, 'links');
   const a = node('a', '下载图片'); a.href = result.output_url + '?download=1'; a.download = ''; links.append(a);
   if (experiment) {
@@ -117,11 +157,14 @@ function addResult(result) {
   }
   article.append(links); $('results').append(article);
 }
-function addDetailImage(label, url) {
+function addDetailImage(label, url, onRemove = () => removeImageViews(url)) {
   const figure = node('figure'), canvas = node('canvas'), img = new Image();
+  figure.dataset.imageUrl = url;
   canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', `${label}的局部放大`);
-  figure.append(node('figcaption', label), canvas); $('detail-grid').append(figure);
-  const item = {img, canvas, ready: false}; detailImages.push(item);
+  const caption = node('figcaption', undefined, 'image-caption');
+  caption.append(node('span', label), removeButton(label, onRemove));
+  figure.append(caption, canvas); $('detail-grid').append(figure);
+  const item = {img, canvas, url, ready: false}; detailImages.push(item);
   img.onload = () => { item.ready = true; if ($('detail-panel').open) drawDetails(); };
   img.onerror = () => figure.append(node('p', '图片加载失败，可点击上方图片重新查看。', 'error'));
   img.src = url; $('detail-panel').hidden = false;
@@ -144,7 +187,7 @@ function drawDetails() {
 $('detail-panel').ontoggle = () => { if ($('detail-panel').open) drawDetails(); };
 $('denoise-form').onsubmit = async event => {
   event.preventDefault();
-  if (!validImage) return;
+  if (!validImage || processing) return;
   const experiment = tab === 'experiment';
   const ids = experiment ? [...document.querySelectorAll('.compare-item:checked')].map(c => c.value) : [defaultModel];
   const clean = experiment && $('synthetic').checked;
@@ -154,6 +197,7 @@ $('denoise-form').onsubmit = async event => {
   form.set('experiment', String(experiment));
   form.set('synthetic', String(clean)); form.set('seed', '42');
   if (experiment && !clean && $('reference').files.length) form.set('reference', $('reference').files[0]);
+  processing = true;
   const controls = [...document.querySelectorAll('form input, form select, form button, nav button')];
   const disabled = controls.map(c => c.disabled); controls.forEach(c => c.disabled = true);
   clearResults(); $('result-panel').hidden = false;
@@ -172,7 +216,12 @@ $('denoise-form').onsubmit = async event => {
     }
     $('status').textContent = errors.length ? `成功 ${results.length} 项，失败 ${errors.length} 项，原因见下方。` : experiment ? `已完成 ${results.length} 项对比。` : '去噪完成。';
     $('status').className = errors.length ? 'error' : '';
-  } finally { controls.forEach((c, i) => c.disabled = disabled[i]); $('export').disabled = !results.length; updateSubmit(); }
+  } finally {
+    processing = false;
+    controls.forEach((c, i) => c.disabled = disabled[i]);
+    document.querySelectorAll('.remove-image').forEach(button => button.disabled = false);
+    $('export').disabled = !results.length; updateSubmit();
+  }
 };
 $('export').onclick = () => {
   const fields = ['model', 'model_name', 'metric_mode', 'psnr', 'ssim', 'brisque', 'estimated_noise', 'quality_notes', 'seconds', 'load_seconds', 'total_seconds', 'parameters', 'weights_bytes', 'device', 'sigma', 'requested_sigma', 'synthetic', 'seed', 'tiled', 'id', 'created_at', 'original_width', 'original_height', 'width', 'height', 'resized', 'input_sha256', 'reference_sha256'];
@@ -202,7 +251,7 @@ init().catch(error => { $('status').className = 'error'; $('status').textContent
 
 function updateSubmit() {
   const count = document.querySelectorAll('.compare-item:checked').length;
-  $('submit').disabled = !validImage || (tab === 'experiment' ? !count : !models.some(m => m.id === defaultModel && m.available));
+  $('submit').disabled = processing || !validImage || (tab === 'experiment' ? !count : !models.some(m => m.id === defaultModel && m.available));
   $('submit').textContent = tab === 'experiment' ? (count ? `开始对比（${count} 项）` : '请至少选择一种方法') : '开始去噪';
 }
 $('image').onchange = async () => {
@@ -213,6 +262,7 @@ $('image').onchange = async () => {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = '';
   const file = $('image').files[0];
+  $('clear-image').hidden = !file;
   if (!file) return;
   if (file.size > 50 * 1024 * 1024) { $('selection-error').textContent = '图片不能超过 50 MB。'; return; }
   const url = URL.createObjectURL(file); previewUrl = url;
