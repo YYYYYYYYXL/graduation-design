@@ -188,13 +188,12 @@ $('export').onclick = () => {
 async function init() {
   const [available, settings] = await Promise.all([api('/api/models'), api('/api/settings')]);
   models = available; defaultModel = settings.default_model;
-  models.forEach(model => {
+  models.filter(model => model.available).forEach(model => {
     const label = node('label'), check = node('input');
     check.type = 'checkbox'; check.className = 'compare-item'; check.value = model.id;
-    check.checked = model.available; check.disabled = !model.available;
+    check.checked = true;
     label.append(check, document.createTextNode(model.name));
-    if (!model.available) label.append(node('small', '权重文件缺失，暂不可用'));
-    else if (model.id === 'p2n_div2k') label.append(node('small', '使用现有网络直接推理'));
+    if (model.id === 'p2n_div2k') label.append(node('small', '使用现有网络直接推理'));
     $('compare-models').append(label);
     check.onchange = updateSubmit;
   });
