@@ -34,12 +34,19 @@ def load_model(item, device):
         torch.cuda.empty_cache()
     method = item["method"]
     if method == "dncnn":
-        if item.get("weights_format") == "fused_bn":
-            from dncnn.pretrained import load_pretrained
-            model = load_pretrained(path, device)
+        # 仅在实际推理时读取权重，兼容训练快照和直接保存的参数字典。
+        from dncnn.model import ARCHITECTURE, DnCNN
+        state = torch.load(path, map_location="cpu", weights_only=True)
+        if state.get("architecture") == ARCHITECTURE:
+            model = DnCNN()
+            model.load_state_dict(state["model"], strict=True)
+        elif state and all(key.startswith("model.") for key in state):
+            from dncnn.pretrained import ColorBlindDnCNN
+            model = ColorBlindDnCNN()
+            model.load_state_dict(state, strict=True)
         else:
-            from dncnn.model import load_trained
-            model = load_trained(path, device)
+            raise ValueError("DnCNN 权重保存格式与现有网络不匹配")
+        model = model.to(device).eval()
     elif method == "p2n":
         from p2n.model import load_pretrained
         model = load_pretrained(path, device)
