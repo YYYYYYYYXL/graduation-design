@@ -6,7 +6,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pdb import set_trace as stx
 import numbers
 
 from einops import rearrange
@@ -192,9 +191,9 @@ class Upsample(nn.Module):
 ##---------- Restormer -----------------------
 class Restormer(nn.Module):
     def __init__(self, 
-        inp_channels=3, 
+        inp_channels=3,
         out_channels=3, 
-        dim = 48,
+        dim = 48, #特征通道
         num_blocks = [4,6,6,8], 
         num_refinement_blocks = 4,
         heads = [1,2,4,8],

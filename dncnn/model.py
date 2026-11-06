@@ -1,8 +1,4 @@
-"""20层、64通道的RGB DnCNN，预测噪声残差后从输入中减去。
-
-参考DnCNN论文/作者仓库的Conv-ReLU、Conv-BN-ReLU、Conv残差结构：
-https://github.com/cszn/DnCNN
-这是项目实现，不声称是作者训练程序或复现其数据协议。
+"""
 同一网络分别从零训练DIV2K混合15/25/50和SIDD两个模型。
 """
 
@@ -18,23 +14,26 @@ class DnCNN(nn.Module):
         super().__init__()
         layers = [nn.Conv2d(3, 64, 3, padding=1), nn.ReLU(inplace=True)]
         for _ in range(18):
+
             layers.extend([nn.Conv2d(64, 64, 3, padding=1, bias=False),
                            nn.BatchNorm2d(64), nn.ReLU(inplace=True)])
         layers.append(nn.Conv2d(64, 3, 3, padding=1))
-        self.network = nn.Sequential(*layers)
-        for module in self.modules():
-            if isinstance(module, nn.Conv2d):
-                nn.init.orthogonal_(module.weight)
+        self.network = nn.Sequential(*layers) #顺序网络
+        for module in self.modules(): # 遍历当前模型中的所有模块，包括里面的卷积层、批归一化层、ReLU 等。
+            if isinstance(module, nn.Conv2d): # 是卷积层？
+                nn.init.orthogonal_(module.weight) #卷积层的权重参数进行正交初始化
                 if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+                    nn.init.zeros_(module.bias) #偏执归零
 
     def predict_noise(self, noisy):
+        # ndim是图片的维度数量，比如图片数量啊，通道数啊，宽度高度啊
+        # 模型的输入数据的维度是四个[图片数量，通道数，宽，高]
         if noisy.ndim != 4 or noisy.shape[1] != 3 or min(noisy.shape[-2:]) < 1:
             raise ValueError("DnCNN输入必须为[N,3,H,W] RGB张量")
         return self.network(noisy)
 
     def forward(self, noisy):
-        return noisy - self.predict_noise(noisy)
+        return noisy - self.predict_noise(noisy) #带噪图-预测噪声
 
 
 def load_trained(path, device="cpu"):

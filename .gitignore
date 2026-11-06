@@ -21,3 +21,6 @@ __pycache__/
 codex_*
 *.part
 *.tmp
+
+# 本地文档
+/docs/

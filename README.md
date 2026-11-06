@@ -2,7 +2,23 @@
 
 在现有 DnCNN、Restormer、P2N 和 BM3D 实现上提供图片去噪与实验对比。复用本地权重，网页只执行推理，不启动训练。原有任务进度保留在 `task_progress.json` 与 `/api/progress`。
 
-## 启动
+## 本地版与服务器版
+
+两个版本均支持单图去噪、实验指标、图片移除、同位置局部放大和 CSV 导出。服务器版面向在线演示，根据服务器资源限制开放的模型与处理尺寸。
+
+| 项目 | 本地版 | 服务器版 |
+| --- | --- | --- |
+| 访问方式 | [本地页面](http://127.0.0.1:5000/)，需先启动服务 | [线上演示](https://denoise.yuxinlei.cloud/) |
+| 单图去噪默认模型 | Restormer · SIDD | DnCNN · DIV2K |
+| 实验对比 | 权重齐全时可用六项，包括两个 DnCNN、两个 Restormer、P2N 和 BM3D | 显示六项，仅两个 DnCNN 可选，其余选项置灰 |
+| 运行设备 | 自动选择 CUDA 或 CPU，BM3D 使用 CPU | CPU |
+| 单次上传总大小 | 50 MB | 16 MB |
+| 原图像素上限 | 1 亿 | 1300 万 |
+| 去噪处理像素上限 | 400 万 | 262,144（约 26 万） |
+
+超过处理像素上限时，系统会等比例缩小图片。下载图和指标都以处理后的尺寸为准。
+
+## 本地启动
 
 继续使用 `denoise310` 环境。
 
@@ -82,19 +98,37 @@ python -B app.py
 
 接口字段和模块关系见 `docs/系统说明.md`。服务同一时间只接受一个去噪请求，其他请求返回忙状态。关闭页面不会取消已经提交的一项任务，后续模型不会自动继续。
 
-## 主要文件
+## 项目目录
 
 ```text
-app.py                  上传、指标计算与结果保存
-inference.py            五个权重和 BM3D 的推理入口
-models.json             模型注册表
-image_quality.py        实验页的无参考质量评分
-denoising_metrics.py    现有 PSNR / SSIM 计算
-web/                    图片去噪与实验对比页面
-third_party/brisque/     BRISQUE 评分文件及许可
-task_progress.json      原有任务进度，保持原样
-checkpoints/            当前去噪模型权重
-归档/                    保留的旧模型权重
+graduation-design/
+├── web/                        网页界面
+│   ├── index.html              单图去噪与实验对比的页面结构
+│   ├── app.js                  上传、模型选择、结果展示、局部放大与导出
+│   └── style.css               页面布局与样式
+├── dncnn/                      DnCNN 网络与权重加载实现
+├── restormer/                  Restormer 模型入口
+├── p2n/                        P2N 模型实现
+├── third_party/                随项目保存的第三方组件
+│   ├── Restormer/              Restormer 网络结构与许可证
+│   └── brisque/                BRISQUE 评分文件与许可证
+├── checkpoints/                运行所需的模型权重，按模型分目录
+├── data/                       DIV2K、SIDD 数据及预处理输出
+├── results/web/                本地去噪图片、指标和运行记录
+├── docs/                       系统说明与项目资料
+├── 归档/                       保留的旧权重
+├── app.py                      Flask 服务入口，处理上传、评分与结果保存
+├── inference.py                统一的模型加载和分块推理入口
+├── models.json                 模型名称、类型及权重路径
+├── denoise_bm3d.py              BM3D 传统去噪实现
+├── denoising_metrics.py         有参考指标 PSNR、SSIM
+├── image_quality.py             无参考评分与噪声估计
+├── split_datasets.py            生成训练、验证与测试划分清单
+├── crop_datasets.py             按清单裁剪图像并进行训练数据增强
+├── add_noise.py                为干净图生成指定强度的高斯噪声
+├── task_progress.json          项目任务清单与进度
+├── requirements-app.txt         本地网页依赖
+└── start.ps1                   Windows 本地启动脚本
 ```
 
-权重、数据和结果不进入 Git，迁移时需另外复制。此次修改仅更新本地项目，不同步线上演示环境。本项目处理照片颗粒噪声，不承诺修复失焦、运动模糊或恢复已经丢失的内容。
+`checkpoints/`、`data/`、`results/` 和 `归档/` 是本地使用的目录，Git 忽略其中的文件。克隆后需自行准备要使用的模型权重，权重的目录和文件名以 `models.json` 为准。
