@@ -21,7 +21,7 @@ from PIL import Image
 from skimage.restoration import estimate_sigma
 
 
-def denoise(input_path, output_path, sigma=None):
+def denoise(input_path, output_path, sigma=None, *, verbose=True):
     output_path = Path(output_path)
     if output_path.exists():
         raise FileExistsError(f"输出已存在，请换一个文件名：{output_path}")
@@ -52,7 +52,8 @@ def denoise(input_path, output_path, sigma=None):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("xb") as file:
         Image.fromarray(pixels).save(file, format="PNG")
-    print(f"去噪完成，sigma={sigma:.2f}，耗时={elapsed:.4f} 秒，输出：{output_path}", flush=True)
+    if verbose:
+        print(f"去噪完成，sigma={sigma:.2f}，耗时={elapsed:.4f} 秒，输出：{output_path}", flush=True)
     return float(sigma), elapsed
 
 

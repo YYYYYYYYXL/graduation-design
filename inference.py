@@ -11,6 +11,8 @@ from torch.nn import functional as F
 
 ROOT = Path(__file__).resolve().parent
 MODELS = {item["id"]: item for item in json.loads((ROOT / "models.json").read_text(encoding="utf-8"))}
+# 普通照片默认使用已有官方真实噪声模型；实验页面仍可选其他权重。
+DEFAULT_MODEL = "restormer_real"
 _cached_key = None
 _cached_model = None
 
@@ -91,7 +93,7 @@ def denoise(model_id, input_path, output_path, sigma=None, device="auto"):
         raise ValueError("CUDA 不可用，请选择 CPU 或自动")
     if item["method"] == "bm3d":
         from denoise_bm3d import denoise as bm3d_denoise
-        actual_sigma, seconds = bm3d_denoise(input_path, output_path, sigma)
+        actual_sigma, seconds = bm3d_denoise(input_path, output_path, sigma, verbose=False)
         return dict(seconds=seconds, load_seconds=0, device="cpu", sigma=actual_sigma, tiled=False)
     if not (ROOT / item["path"]).is_file():
         raise ValueError("该模型权重尚未提供")

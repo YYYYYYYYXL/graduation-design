@@ -4,6 +4,7 @@ import csv
 import json
 import math
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -13,7 +14,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import HTTPException
 
 from denoising_metrics import calculate_psnr, calculate_ssim
-from inference import MODELS, ROOT, denoise, model_list
+from inference import DEFAULT_MODEL, MODELS, ROOT, denoise, model_list
 
 app = Flask(__name__, static_folder="web", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
@@ -30,6 +31,12 @@ def index():
 @app.get("/api/models")
 def models():
     return jsonify(model_list())
+
+
+@app.get("/api/settings")
+def settings():
+    return jsonify(default_model=DEFAULT_MODEL, max_pixels=MAX_PIXELS,
+                   max_upload_bytes=app.config["MAX_CONTENT_LENGTH"])
 
 
 @app.get("/api/progress")
@@ -72,7 +79,10 @@ def read_image(upload):
 
 def number(name, default, low, high):
     raw = request.form.get(name, "").strip()
-    value = default if not raw else float(raw)
+    try:
+        value = default if not raw else float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} 必须填写数字") from exc
     if value is not None and (not math.isfinite(value) or not low <= value <= high):
         raise ValueError(f"{name} 必须在 {low}～{high} 之间")
     return value
@@ -91,9 +101,16 @@ def process():
     if not INFERENCE_LOCK.acquire(blocking=False):
         return jsonify(error="另一个去噪请求正在处理，请稍后重试"), 409
     try:
-        model_id = request.form.get("model", "")
+        started = time.perf_counter()
+        model_id = request.form.get("model", DEFAULT_MODEL)
         if model_id not in MODELS:
             raise ValueError("请选择有效模型")
+        item = MODELS[model_id]
+        if item["path"] and not (ROOT / item["path"]).is_file():
+            raise ValueError("该模型的权重文件不存在，请选择其他模型")
+        device = request.form.get("device", "auto")
+        if device not in ("auto", "cpu", "cuda"):
+            raise ValueError("无效的运行设备")
         pixels = read_image(request.files.get("image"))
         reference = read_image(request.files["reference"]) if request.files.get("reference") else None
         sigma = number("sigma", None, 0, 255)
@@ -118,7 +135,7 @@ def process():
         if reference is not None:
             Image.fromarray(reference).save(directory / "reference.png")
         timing = denoise(model_id, directory / "input.png", directory / "output.png", sigma,
-                         request.form.get("device", "auto"))
+                         device)
         with Image.open(directory / "output.png") as image:
             output = np.array(image)
         result = dict(id=run_id, model=model_id, model_name=MODELS[model_id]["name"],
@@ -126,6 +143,7 @@ def process():
                       height=pixels.shape[0], synthetic=synthetic, seed=int(seed) if synthetic else None,
                       metrics=metrics(output, reference), input_metrics=metrics(pixels, reference),
                       reference_provided=reference is not None, **timing)
+        result["total_seconds"] = time.perf_counter() - started
         result["note"] = MODELS[model_id]["note"]
         result["input_url"] = f"/results/{run_id}/input.png"
         result["output_url"] = f"/results/{run_id}/output.png"
@@ -133,7 +151,7 @@ def process():
         result["json_url"] = f"/results/{run_id}/result.json"
         result["csv_url"] = f"/results/{run_id}/metrics.csv"
         (directory / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
-        row = {key: result[key] for key in ("id", "model", "created_at", "width", "height", "synthetic", "seed", "device", "seconds", "load_seconds", "sigma", "tiled")}
+        row = {key: result[key] for key in ("id", "model", "created_at", "width", "height", "synthetic", "seed", "device", "seconds", "load_seconds", "total_seconds", "sigma", "tiled")}
         row.update(result["metrics"])
         with (directory / "metrics.csv").open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=list(row))
@@ -151,7 +169,8 @@ def result_file(run_id, filename):
     if filename not in ("input.png", "output.png", "reference.png", "result.json", "metrics.csv"):
         return jsonify(error="文件不存在"), 404
     return send_from_directory(OUTPUT / run_id, filename,
-                               as_attachment=filename.endswith((".csv", ".json")))
+                               as_attachment=request.args.get("download") == "1" or filename.endswith((".csv", ".json")),
+                               download_name="denoised.png" if filename == "output.png" else filename)
 
 
 @app.errorhandler(Exception)
