@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 let models = [], tab = 'normal', results = [], defaultModel = '', previewUrl = '', validImage = false;
-const methods = {dncnn_div2k: 'DnCNN', restormer_sidd_batch16: 'Restormer', p2n_div2k: 'P2N（预训练推理）', bm3d: 'BM3D'};
+const methods = {dncnn_div2k: 'DnCNN · 自训 DIV2K', restormer_real: 'Restormer · 官方真实噪声', p2n_div2k: 'P2N · 预训练推理', bm3d: 'BM3D'};
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 async function api(url, options) {
   const response = await fetch(url, options);
@@ -9,77 +9,99 @@ async function api(url, options) {
   if (!response.ok) throw new Error(data.error || '请求失败');
   return data;
 }
+function clearResults() {
+  results = [];
+  $('results').replaceChildren(); $('shared-input').replaceChildren(); $('comparison-summary').replaceChildren();
+  $('shared-input').hidden = true; $('comparison-summary').hidden = true;
+  $('result-panel').hidden = true; $('export').disabled = true;
+  $('status').textContent = '';
+}
 function selectTab(next) {
-  if (tab !== next) {
-    results = [];
-    $('status').textContent = '';
-    $('export').disabled = true;
-  }
+  if (tab !== next) clearResults();
   tab = next;
+  const experiment = tab === 'experiment';
   document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === next));
-  $('workspace').hidden = !['normal', 'experiment'].includes(next);
-  $('model-field').hidden = next !== 'experiment';
-  $('intro').hidden = next === 'experiment';
-  $('experiment-options').hidden = next !== 'experiment';
-  $('experiment-options').disabled = next !== 'experiment';
-  $('form-title').textContent = next === 'experiment' ? '实验对比' : '图片去噪';
-  $('model-label').textContent = next === 'experiment' ? '模型' : '去噪方法';
-  $('export').hidden = next !== 'experiment';
-  const previous = $('model').value;
-  $('model').replaceChildren();
-  const choices = next === 'experiment' ? models.filter(m => m.available) : models.filter(m => m.id === defaultModel && m.available);
-  choices.forEach(m => { const option = node('option', m.name); option.value = m.id; $('model').append(option); });
-  if (choices.some(m => m.id === previous)) $('model').value = previous;
-  $('results').replaceChildren();
-  results.forEach(addResult);
-  $('result-panel').hidden = !results.length;
+  for (const id of ['experiment-input', 'experiment-options']) {
+    $(id).hidden = !experiment; $(id).disabled = !experiment;
+  }
+  $('intro').textContent = experiment ? '同一张图片，看看不同方法去噪后的区别。' : '减少照片里的颗粒噪点。上传照片后直接开始处理。';
+  $('form-title').textContent = experiment ? '实验对比' : '图片去噪';
+  $('result-title').textContent = experiment ? '对比结果' : '去噪结果';
+  $('export').hidden = !experiment;
+  $('results').className = experiment ? 'result-grid' : '';
+  updateMode();
+}
+function updateMode() {
+  const clean = tab === 'experiment' && $('synthetic').checked;
+  $('upload-label').textContent = tab === 'normal' ? '上传图片' : clean ? '上传清晰照片' : '上传带噪照片';
+  $('noise-options').hidden = !clean; $('noise-level').disabled = !clean;
+  $('reference-options').hidden = clean; $('reference').disabled = clean;
+  $('sigma-field').hidden = clean; $('sigma').disabled = clean;
+  $('seed-field').hidden = !clean; $('seed').disabled = !clean;
   updateSubmit();
 }
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
-$('compare').onchange = () => $('compare-models').hidden = !$('compare').checked;
-$('synthetic').onchange = () => { $('reference').disabled = $('synthetic').checked; if ($('synthetic').checked) $('reference').value = ''; };
+document.querySelectorAll('[name="input-mode"]').forEach(radio => radio.onchange = () => { clearResults(); updateMode(); });
+$('clear-reference').onclick = () => { $('reference').value = ''; };
+function imageFigure(label, url) {
+  const figure = node('figure'), link = node('a'), img = node('img');
+  link.href = url; link.target = '_blank'; link.rel = 'noopener';
+  img.src = url; img.alt = label; img.loading = 'lazy';
+  link.append(img); figure.append(node('figcaption', label), link); return figure;
+}
+function showSummary() {
+  const first = results[0], hasReference = first.reference_provided;
+  const summary = $('comparison-summary'); summary.replaceChildren(); summary.hidden = false;
+  summary.append(node('p', hasReference ? 'PSNR、SSIM 越高，通常越接近参考图；仍需结合纹理和细节判断。' : '没有干净参考图，本次只比较图片效果和用时，不计算 PSNR、SSIM。', 'muted'));
+  const wrapper = node('div', undefined, 'table-scroll'), table = node('table');
+  const caption = node('caption', '本次对比汇总'); table.append(caption);
+  const head = node('thead'), heading = node('tr');
+  const labels = ['方法', ...(hasReference ? ['PSNR (dB)', 'SSIM'] : []), '处理用时 (s)'];
+  labels.forEach(label => { const th = node('th', label); th.scope = 'col'; heading.append(th); });
+  head.append(heading); table.append(head);
+  const body = node('tbody');
+  results.forEach(r => {
+    const row = node('tr');
+    [r.model_name, ...(hasReference ? [format(r.metrics.psnr), format(r.metrics.ssim, 4)] : []), format(r.total_seconds)].forEach(v => row.append(node('td', v)));
+    body.append(row);
+  });
+  table.append(body); wrapper.append(table); summary.append(wrapper);
+  summary.append(node('p', '用时包含图片读写和模型加载，首次使用通常更慢。点击图片可查看原图。' + (results.some(r => r.tiled) ? '部分结果采用分块处理，指标可能与整图不同。' : ''), 'muted'));
+}
 function format(value, digits = 3) { return value === null || value === undefined ? '未测量' : typeof value === 'number' ? value.toFixed(digits) : value; }
 function addResult(result) {
   const experiment = tab === 'experiment';
   const article = node('article', undefined, 'result');
-  if (experiment) article.append(node('h3', result.model_name));
-  const images = node('div', undefined, 'images');
-  [['输入图', result.input_url], ['去噪结果', result.output_url], ['参考图 GT', result.reference_url]].forEach(([label, url]) => {
-    if (!url || (!experiment && label === '参考图 GT')) return;
-    const figure = node('figure'), link = node('a'), img = node('img');
-    link.href = url; link.target = '_blank'; link.rel = 'noopener'; img.src = url; img.alt = label; img.loading = 'lazy';
-    link.append(img); figure.append(node('figcaption', label), link); images.append(figure);
-  });
-  const values = node('div', undefined, 'metrics');
-  [['PSNR (dB)', format(result.metrics.psnr)], ['SSIM', format(result.metrics.ssim, 4)], ['处理用时 (s)', format(result.total_seconds)]].forEach(([label, value]) => {
-    const item = node('span', label); item.append(node('strong', value)); values.append(item);
-  });
-  const links = node('div', undefined, 'links');
-  const downloads = experiment ? [['下载图片', result.output_url], ['导出指标', result.csv_url]] : [['下载图片', result.output_url]];
-  downloads.forEach(([label, url]) => { const a = node('a', label); a.href = url + (url.endsWith('.png') ? '?download=1' : ''); a.download = ''; links.append(a); });
-  article.append(images);
   if (experiment) {
-    article.append(values);
-    article.append(node('p', '处理用时包含读写图片和模型加载；首次使用通常更慢。', 'muted'));
-    if (result.tiled) article.append(node('p', '该图片采用分块处理，指标可能与整图处理不同。', 'muted'));
+    article.append(node('h3', result.model_name));
+    if (results.length === 1) {
+      $('shared-input').hidden = false;
+      $('shared-input').append(imageFigure('共同输入 · 带噪照片', result.input_url));
+      if (result.reference_url) $('shared-input').append(imageFigure('干净参考图', result.reference_url));
+    }
+    showSummary();
   }
-  article.append(links);
-  $('results').append(article);
+  const images = node('div', undefined, 'images');
+  if (!experiment) images.append(imageFigure('输入图', result.input_url));
+  images.append(imageFigure('去噪结果', result.output_url)); article.append(images);
+  const links = node('div', undefined, 'links');
+  const a = node('a', '下载图片'); a.href = result.output_url + '?download=1'; a.download = ''; links.append(a);
+  article.append(links); $('results').append(article);
 }
 $('denoise-form').onsubmit = async event => {
   event.preventDefault();
   if (!validImage) return;
   const experiment = tab === 'experiment';
-  const ids = experiment && $('compare').checked ? [...document.querySelectorAll('.compare-item:checked')].map(c => c.value) : [$('model').value];
+  const ids = experiment ? [...document.querySelectorAll('.compare-item:checked')].map(c => c.value) : [defaultModel];
+  const clean = experiment && $('synthetic').checked;
   if (!ids.length) { $('status').textContent = '请至少选择一个模型'; return; }
-  if (experiment && $('synthetic').checked && !$('sigma').value.trim()) { $('status').textContent = '添加噪声时请填写噪声强度。'; return; }
-  if (experiment && $('image').files[0].size + ($('reference').files[0]?.size || 0) > 25 * 1024 * 1024) { $('status').textContent = '图片合计不能超过 25 MB。'; return; }
-  const form = new FormData(); form.set('image', $('image').files[0]); form.set('device', 'auto'); form.set('sigma', experiment ? $('sigma').value : '');
-  form.set('synthetic', String(experiment && $('synthetic').checked)); form.set('seed', experiment ? $('seed').value : '42');
-  if (experiment && !$('synthetic').checked && $('reference').files.length) form.set('reference', $('reference').files[0]);
+  if (experiment && $('image').files[0].size + (!clean ? $('reference').files[0]?.size || 0 : 0) > 25 * 1024 * 1024) { $('status').textContent = '图片合计不能超过 25 MB。'; return; }
+  const form = new FormData(); form.set('image', $('image').files[0]); form.set('device', 'auto'); form.set('sigma', experiment ? (clean ? $('noise-level').value : $('sigma').value) : '');
+  form.set('synthetic', String(clean)); form.set('seed', clean ? $('seed').value : '42');
+  if (experiment && !clean && $('reference').files.length) form.set('reference', $('reference').files[0]);
   const controls = [...document.querySelectorAll('form input, form select, form button, nav button')];
   const disabled = controls.map(c => c.disabled); controls.forEach(c => c.disabled = true);
-  results = []; $('results').replaceChildren(); $('result-panel').hidden = false; $('export').disabled = true;
+  clearResults(); $('result-panel').hidden = false;
   $('status').className = ''; const errors = [];
   try {
     for (const [index, id] of ids.entries()) {
@@ -91,7 +113,7 @@ $('denoise-form').onsubmit = async event => {
     }
     $('status').textContent = errors.length ? `成功 ${results.length} 项，失败 ${errors.length} 项，原因见下方。` : experiment ? `已完成 ${results.length} 个模型的对比。` : '去噪完成。';
     $('status').className = errors.length ? 'error' : '';
-  } finally { controls.forEach((c, i) => c.disabled = disabled[i]); $('export').disabled = !results.length; }
+  } finally { controls.forEach((c, i) => c.disabled = disabled[i]); $('export').disabled = !results.length; updateSubmit(); }
 };
 $('export').onclick = () => {
   const rows = [['model', 'psnr', 'ssim', 'seconds', 'load_seconds', 'total_seconds', 'device', 'sigma', 'seed', 'tiled', 'run_id'], ...results.map(r => [r.model, r.metrics.psnr, r.metrics.ssim, r.seconds, r.load_seconds, r.total_seconds, r.device, r.sigma, r.seed, r.tiled, r.id])];
@@ -106,22 +128,27 @@ async function init() {
     const label = node('label'), check = node('input');
     check.type = 'checkbox'; check.className = 'compare-item'; check.value = model.id;
     check.checked = Object.hasOwn(methods, model.id);
-    label.append(check, document.createTextNode(model.name)); $('compare-models').append(label);
+    label.append(check, document.createTextNode(methods[model.id] || model.name));
+    $(Object.hasOwn(methods, model.id) ? 'compare-models' : 'more-models').append(label);
+    check.onchange = updateSubmit;
   });
   selectTab(tab);
-  $('model').disabled = false; updateSubmit();
+  updateSubmit();
 }
 init().catch(error => { $('status').className = 'error'; $('status').textContent = `加载失败：${error.message}`; });
 
 function updateSubmit() {
-  $('submit').disabled = !validImage || !$('model').options.length;
+  const count = document.querySelectorAll('.compare-item:checked').length;
+  $('submit').disabled = !validImage || (tab === 'experiment' ? !count : !models.some(m => m.id === defaultModel && m.available));
+  $('submit').textContent = tab === 'experiment' ? (count ? `开始对比（${count} 种）` : '请至少选择一种方法') : '开始去噪';
 }
 $('image').onchange = async () => {
   validImage = false; updateSubmit();
   $('selection-error').textContent = ''; $('status').textContent = '';
-  results = []; $('results').replaceChildren(); $('result-panel').hidden = true; $('export').disabled = true;
+  clearResults();
   $('preview').hidden = true;
   if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = '';
   const file = $('image').files[0];
   if (!file) return;
   if (file.size > 25 * 1024 * 1024) { $('selection-error').textContent = '图片不能超过 25 MB。'; return; }

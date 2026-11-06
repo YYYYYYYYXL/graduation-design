@@ -1,24 +1,29 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>图像去噪系统</title><link rel="stylesheet" href="/static/style.css?v=3"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>图像去噪系统</title><link rel="stylesheet" href="/static/style.css?v=4"></head>
 <body>
 <header><a class="brand" href="/">图像去噪系统</a><nav aria-label="功能页面"><button class="active" data-tab="normal">图片去噪</button><button data-tab="experiment">实验对比</button></nav></header>
 <main>
 <section id="workspace">
 <form id="denoise-form" class="panel">
 <h2 id="form-title">图片去噪</h2><p id="intro" class="muted">减少照片里的颗粒噪点。上传照片后直接开始处理。</p>
-<label class="upload">上传图片<input id="image" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" required><span>支持 PNG、JPG、WebP、BMP；总上传不超过 25 MB，每张不超过 400 万像素。</span></label>
-<figure id="preview" hidden><img id="preview-image" alt="待处理的照片"><figcaption id="file-info"></figcaption></figure><div id="model-field" class="fields" hidden><label><span id="model-label">模型</span><select id="model" disabled></select></label></div>
-<fieldset id="experiment-options" hidden disabled><legend>实验设置</legend>
-<label><input id="synthetic" type="checkbox">给干净图片添加高斯噪声</label>
-<div class="fields"><label>噪声强度 σ<input id="sigma" type="number" min="0" max="255" step="any" placeholder="BM3D 留空自动估计"></label><label>随机种子<input id="seed" type="number" min="0" max="4294967295" step="1" value="42"></label><label>干净参考图（可选）<input id="reference" type="file" accept="image/png,image/jpeg,image/webp,image/bmp"></label></div>
-<p class="muted">计算 PSNR、SSIM 需要同尺寸且对齐的干净参考图。添加噪声时，上传原图即为参考图。</p>
-<label><input id="compare" type="checkbox">比较多个模型</label><div id="compare-models" class="checks" hidden></div>
+<fieldset id="experiment-input" hidden disabled><legend>1 · 你准备了什么图片？</legend>
+<div class="mode-options"><label><input type="radio" name="input-mode" value="noisy" checked>我有带噪照片<small>直接比较处理效果，不额外加噪。</small></label><label><input id="synthetic" type="radio" name="input-mode" value="clean">我有清晰照片<small>自动添加相同噪点，并计算效果指标。</small></label></div>
+</fieldset>
+<label class="upload"><span id="upload-label">上传图片</span><input id="image" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" required><span>支持 PNG、JPG、WebP、BMP；总上传不超过 25 MB，每张不超过 400 万像素。</span></label>
+<figure id="preview" hidden><img id="preview-image" alt="待处理的照片"><figcaption id="file-info"></figcaption></figure>
+<fieldset id="experiment-options" hidden disabled><legend>2 · 选择要比较的方法</legend>
+<p class="muted">已选好四种方法，可取消不需要的；选得越多，等待越久。</p>
+<div id="compare-models" class="checks"></div>
+<details><summary>其他模型版本</summary><div id="more-models" class="checks"></div></details>
+<div id="noise-options" class="fields" hidden><label>添加多少噪点<select id="noise-level"><option value="15">轻度 · 15</option><option value="25" selected>中度 · 25</option><option value="50">重度 · 50</option></select></label></div>
+<details id="reference-options"><summary>我还有对应的干净照片（可选）</summary><p class="muted">同尺寸、同内容且位置对齐，才能计算 PSNR、SSIM。没有也能比较图片效果和用时。</p><label>上传干净参考图<input id="reference" type="file" accept="image/png,image/jpeg,image/webp,image/bmp"></label><button id="clear-reference" type="button">移除参考图</button></details>
+<details><summary>高级设置（一般不用改）</summary><div class="fields"><label id="sigma-field">BM3D 噪声强度<input id="sigma" type="number" min="0" max="255" step="any" placeholder="留空自动估计"></label><label id="seed-field" hidden>随机种子<input id="seed" type="number" min="0" max="4294967295" step="1" value="42"></label></div><p class="muted">清晰照片模式下，各方法使用同一份噪声；P2N 使用已有预训练网络，不进行单图训练。</p></details>
 </fieldset>
 <p id="selection-error" class="error" role="alert"></p><button id="submit" class="primary" type="submit" disabled>开始去噪</button><p id="status" role="status" aria-live="polite"></p>
 </form>
-<section id="result-panel" class="panel" hidden><div class="section-title"><h2>去噪结果</h2><button id="export" disabled hidden>导出对比指标</button></div><div id="results"></div></section>
+<section id="result-panel" class="panel" hidden><div class="section-title"><h2 id="result-title">去噪结果</h2><button id="export" disabled hidden>导出对比指标</button></div><div id="comparison-summary" hidden></div><div id="shared-input" class="images" hidden></div><div id="results"></div></section>
 </section>
 
-</main><script src="/static/app.js?v=3" defer></script>
+</main><script src="/static/app.js?v=4" defer></script>
 </body></html>
