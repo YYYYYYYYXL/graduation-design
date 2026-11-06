@@ -1,4 +1,0 @@
-# 保留denoise310已有的PyTorch CUDA安装；此文件不安装/升级torch或torchvision。
-# 仅在缺少这些依赖时由用户手动安装；已有numpy/pillow/scikit-image继续使用。
-einops>=0.6,<0.9
-tqdm>=4.65,<5
