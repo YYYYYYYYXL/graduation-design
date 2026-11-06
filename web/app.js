@@ -38,8 +38,6 @@ function updateMode() {
   $('upload-label').textContent = tab === 'normal' ? '上传图片' : clean ? '上传清晰照片' : '上传带噪照片';
   $('noise-options').hidden = !clean; $('noise-level').disabled = !clean;
   $('reference-options').hidden = clean; $('reference').disabled = clean;
-  $('sigma-field').hidden = clean; $('sigma').disabled = clean;
-  $('seed-field').hidden = !clean; $('seed').disabled = !clean;
   updateMetricGuide();
   updateSubmit();
 }
@@ -152,9 +150,9 @@ $('denoise-form').onsubmit = async event => {
   const clean = experiment && $('synthetic').checked;
   if (!ids.length) { $('status').textContent = '请至少选择一个模型'; return; }
   if (experiment && $('image').files[0].size + (!clean ? $('reference').files[0]?.size || 0 : 0) > 50 * 1024 * 1024) { $('status').textContent = '图片合计不能超过 50 MB。'; return; }
-  const form = new FormData(); form.set('image', $('image').files[0]); form.set('device', experiment ? $('device').value : 'auto'); form.set('sigma', experiment ? (clean ? $('noise-level').value : $('sigma').value) : '');
+  const form = new FormData(); form.set('image', $('image').files[0]); form.set('device', 'auto'); form.set('sigma', clean ? $('noise-level').value : '');
   form.set('experiment', String(experiment));
-  form.set('synthetic', String(clean)); form.set('seed', clean ? $('seed').value : '42');
+  form.set('synthetic', String(clean)); form.set('seed', '42');
   if (experiment && !clean && $('reference').files.length) form.set('reference', $('reference').files[0]);
   const controls = [...document.querySelectorAll('form input, form select, form button, nav button')];
   const disabled = controls.map(c => c.disabled); controls.forEach(c => c.disabled = true);

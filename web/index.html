@@ -17,7 +17,6 @@
 <div id="compare-models" class="checks"></div>
 <div id="noise-options" class="fields" hidden><label>添加多少噪点<select id="noise-level"><option value="15">轻度 · 15</option><option value="25" selected>中度 · 25</option><option value="50">重度 · 50</option></select></label></div>
 <details id="reference-options"><summary>我还有对应的干净照片（可选）</summary><p class="muted">必须是同一场景、同尺寸且位置对齐，才能计算 PSNR、SSIM。没有参考图时自动计算 BRISQUE 质量评分和噪声估计。</p><label>上传干净参考图<input id="reference" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/heic,image/heif,.heic,.heif"></label><button id="clear-reference" type="button">移除参考图</button></details>
-<details><summary>高级设置（一般不用改）</summary><div class="fields"><label id="sigma-field">BM3D 噪声强度<input id="sigma" type="number" min="0" max="255" step="any" placeholder="留空自动估计"></label><label id="seed-field" hidden>随机种子<input id="seed" type="number" min="0" max="4294967295" step="1" value="42"></label><label>运行设备<select id="device"><option value="auto">自动选择</option><option value="cpu">CPU</option><option value="cuda">GPU（需要 CUDA）</option></select></label></div><p class="muted">P2N 使用现有网络直接推理。BM3D 固定使用 CPU，其余模型采用上方选择的设备。</p></details>
 <p id="metric-guide" class="metric-guide"></p>
 </fieldset>
 <p id="selection-error" class="error" role="alert"></p><button id="submit" class="primary" type="submit" disabled>开始去噪</button><p id="status" role="status" aria-live="polite"></p>
@@ -27,5 +26,5 @@
 </section>
 </section>
 
-</main><script src="/static/app.js?v=7" defer></script>
+</main><script src="/static/app.js?v=8" defer></script>
 </body></html>
