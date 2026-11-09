@@ -123,11 +123,13 @@ graduation-design/
 │   ├── index.html              单图去噪与实验对比的页面结构
 │   ├── app.js                  上传、模型选择、结果展示、局部放大与导出
 │   └── style.css               页面布局与样式
-├── dncnn/                      DnCNN 网络与权重加载实现
-├── restormer/                  Restormer 模型入口
+├── dncnn/                      DnCNN 网络定义、权重加载与许可证
+│   ├── model.py                DnCNN 网络结构和训练权重加载
+│   └── pretrained.py           另一种权重保存格式的 DnCNN 加载
+├── restormer/                  Restormer 网络定义、权重加载与许可证
+│   └── model.py                网络结构、create_model() 和权重加载
 ├── p2n/                        P2N 模型实现
 ├── third_party/                随项目保存的第三方组件
-│   ├── Restormer/              Restormer 网络结构与许可证
 │   └── brisque/                BRISQUE 评分文件与许可证
 ├── checkpoints/                运行所需的模型权重，按模型分目录
 ├── data/                       DIV2K、SIDD 数据及预处理输出

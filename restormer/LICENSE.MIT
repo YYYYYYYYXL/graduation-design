@@ -1,5 +1,6 @@
 Restormer reference implementation: https://github.com/swz30/Restormer
 The architecture in model.py is adapted from that implementation.
+Source revision: 68dc6ac472db26f16361150cb7a96a1bc87da93f.
 
 MIT License
 
