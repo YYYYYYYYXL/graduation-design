@@ -20,15 +20,16 @@ class LayerNorm(nn.Module):
             self.body["bias"] = nn.Parameter(torch.zeros(dim))
 
     def forward(self, features):
-        values = features.permute(0, 2, 3, 1)  # [图片数, 高, 宽, 通道]
-        variance = values.var(dim=-1, keepdim=True, unbiased=False)
+        values = features
+        variance = values.var(dim=1, keepdim=True, unbiased=False) # 沿第二维通道计算方差
         if self.with_bias:
-            mean = values.mean(dim=-1, keepdim=True)
+            mean = values.mean(dim=1, keepdim=True)
             values = values - mean
-        values = values / torch.sqrt(variance + 1e-5) * self.body["weight"]
+        weight = self.body["weight"].view(1, -1, 1, 1)
+        values = values / torch.sqrt(variance + 1e-5) * weight
         if self.with_bias:
-            values = values + self.body["bias"]
-        return values.permute(0, 3, 1, 2)
+            values = values + self.body["bias"].view(1, -1, 1, 1)
+        return values
 
 
 class TransformerBlock(nn.Module):
