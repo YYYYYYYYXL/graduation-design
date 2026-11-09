@@ -44,11 +44,6 @@ def settings():
                    max_upload_bytes=app.config["MAX_CONTENT_LENGTH"])
 
 
-@app.get("/api/progress")
-def progress():
-    return jsonify(json.loads((ROOT / "task_progress.json").read_text(encoding="utf-8")))
-
-
 @app.get("/api/history/<model_id>")
 def history(model_id):
     item = MODELS.get(model_id)

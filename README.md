@@ -1,6 +1,6 @@
 # 基于深度学习的图像去噪系统
 
-在现有 DnCNN、Restormer、P2N 和 BM3D 实现上提供图片去噪与实验对比。复用本地权重，网页只执行推理，不启动训练。原有任务进度保留在 `task_progress.json` 与 `/api/progress`。
+在现有 DnCNN、Restormer、P2N 和 BM3D 实现上提供图片去噪与实验对比。复用本地权重，网页只执行推理，不启动训练。
 
 ## 本地版与服务器版
 
@@ -109,7 +109,6 @@ python -B train_restormer.py --dataset sidd --output-dir checkpoints/restormer_s
 | GET `/api/settings` | 默认模型与上传限制 |
 | GET `/api/models` | 当前模型与文件是否存在 |
 | GET `/api/history/<id>` | 已有训练日志，缺失则返回空列表 |
-| GET `/api/progress` | 原有任务进度 |
 | POST `/api/denoise` | 单项去噪，实验页按顺序发起多项请求 |
 | GET `/results/<id>/<file>` | 图片及 JSON/CSV 下载 |
 
@@ -148,7 +147,6 @@ graduation-design/
 ├── train_dncnn.py              DnCNN 的 DIV2K / SIDD 训练入口
 ├── train_restormer.py          Restormer 的 DIV2K / SIDD 训练入口
 ├── paired_dataset.py           两个训练脚本共用的图像对读取与验证
-├── task_progress.json          项目任务清单与进度
 ├── requirements-app.txt         本地网页依赖
 └── start.ps1                   Windows 本地启动脚本
 ```
