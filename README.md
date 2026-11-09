@@ -71,6 +71,23 @@ python -B app.py
 
 神经网络使用 256×256 核心块和 32 像素上下文边界，补齐尺寸后裁回原区域；大图结果可能与整图推理不同。BM3D 使用原有整图实现，噪声强度留空时只从带噪输入估计。CPU 和大图处理可能较慢。
 
+## 训练入口
+
+`train_dncnn.py` 和 `train_restormer.py` 提供对应网络的配对监督训练，数据读取与验证共用 `paired_dataset.py`。DIV2K 读取 `noise_manifest.csv` 中已有的加噪图片与 GT，SIDD 读取 `sidd_train/noisy`、`sidd_train/gt` 和 `sidd_val/input_crops`、`sidd_val/target_crops`。训练与验证分别使用已有的 train、val 划分。
+
+以下命令会实际启动训练，请在需要训练时执行。
+
+```powershell
+python -B train_dncnn.py --dataset div2k --output-dir checkpoints/dncnn_div2k_new
+python -B train_dncnn.py --dataset sidd --output-dir checkpoints/dncnn_sidd_new
+python -B train_restormer.py --dataset div2k --output-dir checkpoints/restormer_div2k_new
+python -B train_restormer.py --dataset sidd --output-dir checkpoints/restormer_sidd_new
+```
+
+支持用 `--epochs`、`--batch-size`、`--lr` 和 `--device` 调整训练参数。DnCNN 使用 Adam 与 MSE，Restormer 使用 AdamW 与 L1，CUDA 下 Restormer 启用混合精度。每轮计算验证 PSNR、SSIM，保存最新的 `last.pth`，按验证 PSNR 保存 `best.pth`，并写入本次运行的 `history.csv` 和 `config.json`。已有输出目录会被拒绝，使用新目录开始一次训练。
+
+两个脚本是当前补充的训练入口。已有权重的历史训练设置以其留存的配置、日志为准。
+
 ## 指标和参数
 
 - **PSNR / SSIM**：按照输出 PNG 的 8-bit RGB 像素与参考图计算。SSIM 使用逐通道 11×11 高斯窗口，σ=1.5、总体协方差。相同图片的 PSNR 为字符串 `∞`；无参考图时不计算这两项。
@@ -126,6 +143,9 @@ graduation-design/
 ├── split_datasets.py            生成训练、验证与测试划分清单
 ├── crop_datasets.py             按清单裁剪图像并进行训练数据增强
 ├── add_noise.py                为干净图生成指定强度的高斯噪声
+├── train_dncnn.py              DnCNN 的 DIV2K / SIDD 训练入口
+├── train_restormer.py          Restormer 的 DIV2K / SIDD 训练入口
+├── paired_dataset.py           两个训练脚本共用的图像对读取与验证
 ├── task_progress.json          项目任务清单与进度
 ├── requirements-app.txt         本地网页依赖
 └── start.ps1                   Windows 本地启动脚本
