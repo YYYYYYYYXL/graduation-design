@@ -18,20 +18,19 @@ from werkzeug.exceptions import HTTPException
 from denoising_metrics import calculate_psnr, calculate_ssim
 from inference import DEFAULT_MODEL, MODELS, ROOT, denoise, model_list
 
-register_heif_opener()
+register_heif_opener() # 这是为了让 Pillow 能够读取 HEIC / HEIF 格式的图片。
+
 app = Flask(__name__, static_folder="web", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
-OUTPUT = ROOT / "results/web"
-INFERENCE_LOCK = threading.Lock()
-MAX_PIXELS = 4_000_000
-MAX_INPUT_PIXELS = 100_000_000
+OUTPUT = ROOT / "results/web" # 存放用户请求结果的目录，避免与训练日志混淆。
+INFERENCE_LOCK = threading.Lock() # 锁对象
+MAX_PIXELS = 4_000_000 # 实际推理时的最大像素数，超过该值会自动缩小图片。
+MAX_INPUT_PIXELS = 100_000_000 # 原图最多一亿像素
 Image.MAX_IMAGE_PIXELS = MAX_INPUT_PIXELS
-
 
 @app.get("/")
 def index():
     return app.send_static_file("index.html")
-
 
 @app.get("/api/models")
 def models():
@@ -43,7 +42,7 @@ def settings():
     return jsonify(default_model=DEFAULT_MODEL, max_pixels=MAX_PIXELS, max_input_pixels=MAX_INPUT_PIXELS,
                    max_upload_bytes=app.config["MAX_CONTENT_LENGTH"])
 
-
+""" 
 @app.get("/api/history/<model_id>")
 def history(model_id):
     item = MODELS.get(model_id)
@@ -56,7 +55,7 @@ def history(model_id):
         rows = list(csv.DictReader(stream))
     return jsonify(rows=rows, note="原有 CSV 日志，未补写、未伪造。")
 
-
+ """
 def read_image(upload):
     if upload is None or not upload.filename:
         raise ValueError("请选择图片")
@@ -66,7 +65,7 @@ def read_image(upload):
                 raise ValueError("仅支持 PNG、JPEG、WebP、BMP、HEIC 和 HEIF")
             if image.width * image.height > MAX_INPUT_PIXELS or min(image.size) < 11:
                 raise ValueError("图片每边至少 11 像素，原图总像素不能超过 1 亿")
-            image = ImageOps.exif_transpose(image)
+            image = ImageOps.exif_transpose(image) # 摆正照片
             original_size = image.size
             if image.width * image.height > MAX_PIXELS:
                 scale = math.sqrt(MAX_PIXELS / (image.width * image.height))
@@ -85,6 +84,7 @@ def read_image(upload):
 
 
 def number(name, default, low, high):
+    """     负责从网页表单读取一个数字，检查它是否合法，再返回。"""
     raw = request.form.get(name, "").strip()
     try:
         value = default if not raw else float(raw)
@@ -96,9 +96,10 @@ def number(name, default, low, high):
 
 
 def metrics(image, reference, quality=False):
+    """ 计算图像质量指标。若提供参考图，则计算 PSNR 和 SSIM；否则仅计算无参考指标。 """
     result = dict(psnr=None, ssim=None, brisque=None, estimated_noise=None, quality_notes=[])
-    if reference is None:
-        if quality:
+    if reference is None: # 没有参考图时，计算无参考指标。
+        if quality: # 仅在实验模式下才计算无参考指标，避免占用过多时间。
             from image_quality import no_reference_metrics
             result.update(no_reference_metrics(image))
         return result
@@ -113,20 +114,22 @@ def process():
     if not INFERENCE_LOCK.acquire(blocking=False):
         return jsonify(error="另一个去噪请求正在处理，请稍后重试"), 409
     try:
-        started = time.perf_counter()
-        model_id = request.form.get("model", DEFAULT_MODEL)
-        if model_id not in MODELS:
+        started = time.perf_counter() # 记录请求开始时间
+        model_id = request.form.get("model", DEFAULT_MODEL) # 获取用户选择的模型
+        if model_id not in MODELS: # 选错报错
             raise ValueError("请选择有效模型")
-        item = MODELS[model_id]
+        item = MODELS[model_id] # 获取模型信息
+        # 权重在吗？
         if item["path"] and not (ROOT / item["path"]).is_file():
             raise ValueError("该模型的权重文件不存在，请选择其他模型")
         device = request.form.get("device", "auto")
         if device not in ("auto", "cpu", "cuda"):
             raise ValueError("无效的运行设备")
+        
         pixels, original_size = read_image(request.files.get("image"))
-        reference = None
+        reference = None # 参考图像，若用户上传了则读取，否则为 None
         if request.files.get("reference"):
-            reference, reference_size = read_image(request.files["reference"])
+            reference, reference_size = read_image(request.files["reference"]) # reference_size 是原图尺寸，reference 是缩小后的像素数组
             if reference_size != original_size:
                 raise ValueError("参考图与输入原图尺寸必须相同且内容对齐")
         sigma = number("sigma", None, 0, 255)

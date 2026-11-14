@@ -11,21 +11,23 @@ from torch.nn import functional as F
 class LayerNorm(nn.Module):
     """对每个像素位置的特征通道做归一化。"""
 
-    def __init__(self, dim, LayerNorm_type):
+    def __init__(self, dim, LayerNorm_type: str):
         super().__init__()
-        self.with_bias = LayerNorm_type != "BiasFree"
+        # biasFree 表示不使用偏置，WithBias 表示使用偏置。
+        # with_bias 为 True 时，归一化后会加上偏置，False 时不加偏置。
+        self.with_bias = LayerNorm_type != "BiasFree" # 判断with_bias是否为True。
         # body 保留现有权重中的参数名称，例如 norm1.body.weight。
         self.body = nn.ParameterDict({"weight": nn.Parameter(torch.ones(dim))})
         if self.with_bias:
             self.body["bias"] = nn.Parameter(torch.zeros(dim))
 
-    def forward(self, features):
+    def forward(self, features: torch.Tensor)-> torch.Tensor:
         values = features
         variance = values.var(dim=1, keepdim=True, unbiased=False) # 沿第二维通道计算方差
         if self.with_bias:
             mean = values.mean(dim=1, keepdim=True)
             values = values - mean
-        weight = self.body["weight"].view(1, -1, 1, 1)
+        weight = self.body["weight"].view(1, -1, 1, 1) # view 只改变形状，不改变权重数值，也不增加权重数量。
         values = values / torch.sqrt(variance + 1e-5) * weight
         if self.with_bias:
             values = values + self.body["bias"].view(1, -1, 1, 1)
@@ -35,33 +37,37 @@ class LayerNorm(nn.Module):
 class TransformerBlock(nn.Module):
     """一个模块的两步处理：注意力与残差相加，前馈与残差相加。"""
 
-    def __init__(self, dim, num_heads, ffn_expansion_factor, bias, LayerNorm_type):
+    def __init__(self, dim, num_heads, ffn_expansion_factor, bias, LayerNorm_type: str):
+        """ ffn_expansion_factor: 前馈网络隐藏层通道数与输入通道数的比例。
+            bias: 是否使用卷积偏置。
+        """
         super().__init__()
         self.num_heads = num_heads
         self.norm1 = LayerNorm(dim, LayerNorm_type)
         self.norm2 = LayerNorm(dim, LayerNorm_type)
 
-        # attn 和 ffn 只存放层及参数，具体计算直接写在本类的 forward 中。
-        self.attn = nn.Module()
+        # attn 和 ffn 只存放层及参数，具体计算直接写在 forward。
+        self.attn = nn.Module() # 定义了一个空的 Module，后续会添加属性。
         self.attn.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
         self.attn.qkv = nn.Conv2d(dim, dim * 3, 1, bias=bias)
         self.attn.qkv_dwconv = nn.Conv2d(dim * 3, dim * 3, 3, padding=1, groups=dim * 3, bias=bias)
         self.attn.project_out = nn.Conv2d(dim, dim, 1, bias=bias)
 
-        hidden = int(dim * ffn_expansion_factor)
-        self.ffn = nn.Module()
+        hidden = int(dim * ffn_expansion_factor) # 计算前馈网络的隐藏层通道数
+        self.ffn = nn.Module() # 定义了一个空的 Module，后续会添加属性。
         self.ffn.project_in = nn.Conv2d(dim, hidden * 2, 1, bias=bias)
         self.ffn.dwconv = nn.Conv2d(hidden * 2, hidden * 2, 3, padding=1, groups=hidden * 2, bias=bias)
         self.ffn.project_out = nn.Conv2d(hidden, dim, 1, bias=bias)
 
-    def forward(self, features):
+    def forward(self, features: torch.Tensor)-> torch.Tensor:
         # 第一步：归一化，再按注意力头分组，计算特征通道之间的关系。
-        residual = features
-        normalized = self.norm1(features)
-        qkv = self.attn.qkv(normalized)
-        qkv = self.attn.qkv_dwconv(qkv)
-        query, key, value = qkv.chunk(3, dim=1)
-        batch, channels, height, width = features.shape
+        residual = features #features是输入的特征图，residual保存了原始特征图，用于后续的残差连接。
+        normalized = self.norm1(features) # 对每张图片的每个像素位置，跨通道调整数值尺度。
+        qkv = self.attn.qkv(normalized) # 1x1卷积将特征通道数扩展为原来的3倍，分别表示查询、键、值。
+        qkv = self.attn.qkv_dwconv(qkv) # 3x3深度可分离卷积，保持通道数不变，但增加感受野。
+        query, key, value = qkv.chunk(3, dim=1) # 将通道数分为三份，分别表示查询、键、值。
+        batch, channels, height, width = features.shape # 获取输入特征图的批量大小、通道数、高度和宽度。
+        
         query = query.reshape(batch, self.num_heads, channels // self.num_heads, height * width)
         key = key.reshape(batch, self.num_heads, channels // self.num_heads, height * width)
         value = value.reshape(batch, self.num_heads, channels // self.num_heads, height * width)
