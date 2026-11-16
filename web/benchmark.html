@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>批量评测 · 图像去噪系统</title>
-  <link rel="stylesheet" href="/static/style.css?v=10">
+  <link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
   <header>
@@ -37,6 +37,23 @@
       <p id="batch-state" role="status"></p>
       <progress id="batch-progress" max="1" value="0" aria-label="评测进度"></progress>
       <p class="muted">分数为平均 PSNR（dB）/ SSIM，Δ 表示相对去噪前的 PSNR 提升。各组按所有已选方法都成功的样本计分，耗时以秒/张计。</p>
+      <section class="batch-charts" aria-labelledby="batch-chart-title">
+        <div class="batch-chart-header">
+          <h3 id="batch-chart-title">结果可视化</h3>
+          <div class="batch-chart-tabs" role="group" aria-label="图表视图">
+            <button type="button" data-chart-view="ranking" aria-pressed="true">模型排名</button>
+            <button type="button" data-chart-view="trend" aria-pressed="false">DIV2K 噪声趋势</button>
+          </div>
+        </div>
+        <div class="batch-chart-controls">
+          <label id="batch-chart-group-field">测试组 <select id="batch-chart-group"></select></label>
+          <label>画质指标 <select id="batch-chart-metric"><option value="psnr">PSNR</option><option value="ssim">SSIM</option></select></label>
+        </div>
+        <p id="batch-chart-context" class="muted"></p>
+        <div id="batch-chart-highlights" class="batch-chart-highlights" hidden></div>
+        <div id="batch-chart-content" class="batch-chart-content" hidden></div>
+        <p id="batch-chart-message" class="batch-chart-message" hidden></p>
+      </section>
       <div id="batch-summary" class="table-scroll"></div>
       <div class="links"><a id="batch-summary-csv">下载汇总 CSV</a><a id="batch-images-csv">下载逐图 CSV</a></div>
     </section>
@@ -72,6 +89,8 @@
     </section>
   </main>
   <script src="/static/crop-comparison.js?v=1" defer></script>
-  <script src="/static/benchmark.js?v=1" defer></script>
+  <script src="/static/vendor/echarts/echarts.common.min.js?v=6.1.0" defer></script>
+  <script src="/static/benchmark-charts.js?v=3" defer></script>
+  <script src="/static/benchmark.js?v=2" defer></script>
 </body>
 </html>

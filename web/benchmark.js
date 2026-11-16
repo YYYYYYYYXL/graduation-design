@@ -117,6 +117,7 @@ async function refreshReport(id, previousDone = -1) {
       }
       byId('batch-runs').value = id;
     }
+    updateBenchmarkCharts(report);
     if (first || done !== previousDone) {
       loadSamples().catch(showError);
       if (currentDetail) loadDetail(currentDetail).catch(showError);

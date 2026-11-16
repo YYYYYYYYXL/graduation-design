@@ -112,4 +112,36 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .batch-image-grid figcaption { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 .batch-image-grid img, .batch-image-grid canvas { display: block; width: 100%; max-height: 280px; object-fit: contain; background: #f5f6f7; border-radius: 4px; }
 #batch-detail-title { overflow-wrap: anywhere; }
+
+.batch-charts {
+  margin: 20px 0 24px;
+  padding: clamp(12px, 2.8vw, 24px);
+  border: 1px solid #d8e6e8;
+  border-radius: 12px;
+  background: #f7fbfb;
+}
+.batch-chart-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.batch-chart-header h3 { margin: 0; color: #193e47; font-size: 20px; }
+.batch-chart-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid #e0ebed; border-radius: 8px; background: #eaf3f4; }
+.batch-chart-tabs button { border: 1px solid transparent; color: #455e67; background: transparent; padding: 6px 11px; }
+.batch-chart-tabs button[aria-pressed="true"] { border-color: #d3e4e7; color: #11545d; background: white; font-weight: 600; }
+.batch-chart-controls { display: flex; gap: 8px 16px; flex-wrap: wrap; margin: 16px 0 8px; }
+.batch-chart-controls label { display: flex; align-items: center; gap: 8px; color: #36525b; font-size: 13px; }
+.batch-chart-controls select { min-width: 78px; padding: 6px 9px; border-color: #cddfe2; }
+#batch-chart-context { margin: 0 0 12px; color: #526a74; }
+.batch-chart-highlights { display: grid; grid-template-columns: 1.28fr repeat(2, 1fr); gap: 9px; margin-bottom: 10px; }
+.batch-chart-stat { min-width: 0; padding: 10px 13px; border: 1px solid #dee9eb; border-radius: 8px; background: white; }
+.batch-chart-stat span { display: block; color: #526a74; font-size: 12px; overflow-wrap: anywhere; }
+.batch-chart-stat strong { color: #213d46; font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.batch-chart-stat-leading { border-color: #b5d9d8; background: #e9f6f5; }
+.batch-chart-stat-leading strong { color: #145b64; }
+.batch-chart-content { height: 332px; border: 1px solid #dee9eb; border-radius: 9px; background: white; }
+.batch-chart-message { margin: 0; padding: 22px 14px; border: 1px dashed #cbdcde; border-radius: 8px; color: #526a74; background: white; font-size: 14px; }
+
+@media(max-width: 590px) {
+  .batch-chart-highlights { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .batch-chart-stat-leading { grid-column: 1 / -1; }
+  .batch-chart-stat strong { font-size: 19px; }
+  .batch-chart-content { height: 305px; }
+}
 @media(max-width: 600px) { .nav-link { padding: 8px 12px; } }
