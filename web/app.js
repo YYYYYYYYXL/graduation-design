@@ -46,8 +46,8 @@ function updateMode() {
 function updateMetricGuide() {
   const paired = $('synthetic').checked || $('reference').files.length > 0;
   $('metric-guide').textContent = paired
-    ? '本次看还原准确度：PSNR、SSIM 越高通常越接近干净图，同时比较用时和局部细节。'
-    : '本次看无参考质量：BRISQUE 越低通常越好。噪声估计仅作辅助，变糊也可能让噪声数值变低；请结合放大图判断。';
+    ? 'PSNR、SSIM 越高通常越接近干净图。可以结合用时和放大图比较。'
+    : 'BRISQUE 越低通常表示感知质量越好。可以结合放大图查看纹理和边缘。';
 }
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
 document.querySelectorAll('[name="input-mode"]').forEach(radio => radio.onchange = () => { clearResults(); updateMode(); });
@@ -102,28 +102,35 @@ function imageFigure(label, url, onRemove = () => removeImageViews(url)) {
 }
 function showSummary() {
   const first = results[0], hasReference = first.reference_provided;
+  const devices = new Set(results.map(result => result.device.toUpperCase()));
+  const mixedDevices = devices.size > 1;
+  const deviceNote = mixedDevices ? '' : ` · 计时设备 ${devices.values().next().value}`;
   const summary = $('comparison-summary'); summary.replaceChildren(); summary.hidden = false;
-  summary.append(node('p', hasReference ? 'PSNR、SSIM ↑：越高通常越接近参考图。先与“去噪前”比较，再看各模型的结果。' : 'BRISQUE ↓：0～100，越低通常表示感知质量越好，不是准确率。噪声估计是辅助数值，不能单凭它判断谁更好。', 'metric-guide'));
-  summary.append(node('p', `本次处理 ${first.width} × ${first.height} 像素 · ${first.synthetic ? `合成高斯噪声 σ=${first.requested_sigma} · 随机种子 ${first.seed}` : '上传的带噪照片，未额外加噪'}${first.resized ? ` · 原图 ${first.original_width} × ${first.original_height} 已缩小，指标针对缩小后的图片` : ''}`, 'muted'));
+  summary.append(node('p', hasReference ? 'PSNR、SSIM 越高通常越接近参考图。先看去噪前的基线，再比较各方法。' : 'BRISQUE 越低通常表示感知质量越好。请结合放大图检查细节。', 'metric-guide'));
+  summary.append(node('p', `本次处理 ${first.width} × ${first.height} 像素 · ${first.synthetic ? `合成高斯噪声 σ=${first.requested_sigma} · 随机种子 ${first.seed}` : '上传的带噪照片，未额外加噪'}${first.resized ? ` · 原图 ${first.original_width} × ${first.original_height} 已缩小，指标针对缩小后的图片` : ''}${deviceNote}`, 'muted'));
   const wrapper = node('div', undefined, 'table-scroll'), table = node('table');
   const caption = node('caption', '本次对比汇总'); table.append(caption);
   const head = node('thead'), heading = node('tr');
-  const labels = ['模型 / 方法', ...(hasReference ? ['PSNR ↑ (dB)', 'SSIM ↑'] : ['BRISQUE ↓', '噪声估计（辅助）']), '去噪 (s)', '加载 (s)', '总处理 (s)', '参数量 (M)', '设备'];
+  const labels = ['模型 / 方法', ...(hasReference ? ['PSNR ↑ (dB)', 'SSIM ↑'] : ['BRISQUE ↓']), '去噪耗时 (s)'];
   labels.forEach(label => { const th = node('th', label); th.scope = 'col'; heading.append(th); });
   head.append(heading); table.append(head);
   const body = node('tbody');
-  const scores = value => hasReference ? [format(value.psnr), format(value.ssim, 4)] : [format(value.brisque, 2), format(value.estimated_noise, 2)];
+  const scores = value => hasReference ? [format(value.psnr), format(value.ssim, 4)] : [format(value.brisque, 2)];
   const baseline = node('tr', undefined, 'baseline');
-  ['去噪前 · 原始输入', ...scores(first.input_metrics), '—', '—', '—', '—', '—'].forEach(v => baseline.append(node('td', v)));
+  ['去噪前 · 原始输入', ...scores(first.input_metrics), '—'].forEach(v => baseline.append(node('td', v)));
   body.append(baseline);
   results.forEach(r => {
     const row = node('tr');
-    [r.model_name, ...scores(r.metrics), format(r.seconds), format(r.load_seconds), format(r.total_seconds), r.parameters === null ? '不适用' : format(r.parameters / 1e6), r.device.toUpperCase()].forEach(v => row.append(node('td', v)));
+    const elapsed = node('td', format(r.seconds));
+    if (mixedDevices) elapsed.append(node('span', ` · ${r.device.toUpperCase()}`, 'muted'));
+    [r.model_name, ...scores(r.metrics)].forEach(v => row.append(node('td', v)));
+    row.append(elapsed);
     body.append(row);
   });
   table.append(body); wrapper.append(table); summary.append(wrapper);
   const help = node('details'); help.append(node('summary', '怎么看这些指标和用时？'));
-  help.append(node('p', '总处理时间包含读写、加载、去噪和评分，不含上传传输；加载受缓存影响。BM3D 去噪用时包含噪声估计，神经网络包含分块和设备传输；CPU 与 GPU 速度不能直接当作算法优劣。参数量单位 M 是百万个参数，表示网络规模，不代表质量或内存占用。' + (results.some(r => r.tiled) ? '部分结果使用分块推理。' : ''), 'muted'));
+  help.append(node('p', 'BM3D 的去噪耗时包含噪声估计，神经网络的去噪耗时包含分块和设备传输。解读速度时请结合计时设备。' + (results.some(r => r.tiled) ? '部分结果使用分块推理。' : ''), 'muted'));
+  help.append(node('p', '导出 CSV 可查看噪声估计、加载时间、总处理时间和参数量等明细。', 'muted'));
   help.append(node('p', '这张图的结果不代表所有照片。可以比较同一网络的 DIV2K 与 SIDD 两个版本，但差异也受训练设置影响；也可以比较五个模型与 BM3D。P2N 为现有网络直接推理。', 'muted'));
   summary.append(help);
   const notes = [...first.input_metrics.quality_notes.map(note => `去噪前：${note}`), ...results.flatMap(r => r.metrics.quality_notes.map(note => `${r.model_name}：${note}`))];
