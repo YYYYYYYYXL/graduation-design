@@ -172,15 +172,11 @@ function addDetailImage(label, url, onRemove = () => removeImageViews(url)) {
 function drawDetails() {
   if (!results.length) return;
   const {width, height} = results[0];
-  const size = Math.min(Number($('detail-size').value), width, height);
-  const left = Math.round((width - size) * Number($('detail-x').value) / 100);
-  const top = Math.round((height - size) * Number($('detail-y').value) / 100);
+  const crop = cropRegion(width, height, $('detail-size').value, $('detail-x').value, $('detail-y').value);
+  const {left, top, size} = crop;
   $('detail-location').textContent = `区域左上角 (${left}, ${top})，取 ${size} × ${size} 个原始像素，同倍数放大。`;
   detailImages.forEach(({img, canvas, ready}) => {
-    if (!ready) return;
-    canvas.width = 320; canvas.height = 320;
-    const context = canvas.getContext('2d'); context.imageSmoothingEnabled = false;
-    context.drawImage(img, left, top, size, size, 0, 0, 320, 320);
+    if (ready) drawCrop(canvas, img, crop);
   });
 }
 ['detail-x', 'detail-y', 'detail-size'].forEach(id => $(id).oninput = drawDetails);

@@ -4,6 +4,8 @@
 SSIM为11×11高斯窗口，sigma=1.5，总体协方差，RGB逐通道平均。
 """
 
+import math
+
 import numpy as np
 from skimage.metrics import structural_similarity
 
@@ -29,3 +31,8 @@ def calculate_ssim(prediction, target, **kwargs):
         raise ValueError("SSIM要求同尺寸uint8图像")
     return float(structural_similarity(target, prediction, data_range=255, channel_axis=-1,
                                        gaussian_weights=True, sigma=1.5, use_sample_covariance=False))
+
+
+def reference_scores(prediction, target):
+    psnr = math.inf if np.array_equal(prediction, target) else calculate_psnr(prediction, target)
+    return psnr, calculate_ssim(prediction, target)

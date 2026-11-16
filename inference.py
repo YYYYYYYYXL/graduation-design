@@ -1,6 +1,7 @@
 """四种方法的只读推理入口，不调用任何训练或单图适应代码。"""
 
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parent
 MODELS = {item["id"]: item for item in json.loads((ROOT / "models.json").read_text(encoding="utf-8"))}
 # 普通照片使用现有 SIDD 版本；实验页面逐个选择五个模型和 BM3D。
 DEFAULT_MODEL = "restormer_sidd_batch16"
+INFERENCE_LOCK = threading.Lock()
 _cached_key = None
 _cached_model = None
 

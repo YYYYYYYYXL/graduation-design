@@ -4,7 +4,6 @@ import csv
 import hashlib
 import json
 import math
-import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -15,15 +14,16 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from pillow_heif import register_heif_opener
 from werkzeug.exceptions import HTTPException
 
-from denoising_metrics import calculate_psnr, calculate_ssim
-from inference import DEFAULT_MODEL, MODELS, ROOT, denoise, model_list
+from benchmark import benchmark
+from denoising_metrics import reference_scores
+from inference import DEFAULT_MODEL, INFERENCE_LOCK, MODELS, ROOT, denoise, model_list
 
 register_heif_opener() # 这是为了让 Pillow 能够读取 HEIC / HEIF 格式的图片。
 
 app = Flask(__name__, static_folder="web", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
+app.register_blueprint(benchmark)
 OUTPUT = ROOT / "results/web" # 存放用户请求结果的目录，避免与训练日志混淆。
-INFERENCE_LOCK = threading.Lock() # 锁对象
 MAX_PIXELS = 4_000_000 # 实际推理时的最大像素数，超过该值会自动缩小图片。
 MAX_INPUT_PIXELS = 100_000_000 # 原图最多一亿像素
 Image.MAX_IMAGE_PIXELS = MAX_INPUT_PIXELS
@@ -104,8 +104,8 @@ def metrics(image, reference, quality=False):
             result.update(no_reference_metrics(image))
         return result
     # 相同图像 PSNR 为无穷大，避免把 JSON 非有限数字或人为上限当成实测值。
-    psnr = "∞" if np.array_equal(image, reference) else calculate_psnr(image, reference)
-    result.update(psnr=psnr, ssim=calculate_ssim(image, reference))
+    psnr, ssim = reference_scores(image, reference)
+    result.update(psnr="∞" if math.isinf(psnr) else psnr, ssim=ssim)
     return result
 
 
