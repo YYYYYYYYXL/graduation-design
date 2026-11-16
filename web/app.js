@@ -14,7 +14,7 @@ function clearResults() {
   results = [];
   $('results').replaceChildren(); $('shared-input').replaceChildren(); $('comparison-summary').replaceChildren();
   $('shared-input').hidden = true; $('comparison-summary').hidden = true;
-  $('quality-chart-grid').replaceChildren(); $('quality-charts').hidden = true;
+  renderSingleImageCharts(results);
   $('result-panel').hidden = true; $('export').disabled = true;
   $('status').textContent = '';
   detailImages = []; $('detail-grid').replaceChildren(); $('detail-panel').hidden = true;
@@ -85,7 +85,7 @@ function removeResult(result) {
   results = results.filter(item => item.id !== result.id);
   if (!results.length) clearResults();
   else {
-    showQualityCharts();
+    renderSingleImageCharts(results);
     if (tab === 'experiment') showSummary();
   }
   $('status').textContent = results.length ? `当前保留 ${results.length} 项结果。` : '已移除结果，可重新开始去噪。';
@@ -99,72 +99,6 @@ function imageFigure(label, url, onRemove = () => removeImageViews(url)) {
   const caption = node('figcaption', undefined, 'image-caption');
   caption.append(node('span', label), removeButton(label, onRemove));
   link.append(img); figure.append(caption, link); return figure;
-}
-function showQualityCharts() {
-  const first = results[0];
-  const entries = [
-    {name: '去噪前', scores: first.input_metrics},
-    ...results.map(result => ({name: result.model_name, scores: result.metrics})),
-  ];
-  const metrics = first.reference_provided
-    ? [
-      {id: 'psnr', title: 'PSNR（dB）', hint: '越高越好', digits: 2},
-      {id: 'ssim', title: 'SSIM', hint: '越接近 1 越好', digits: 4, maximum: 1},
-    ]
-    : [{id: 'brisque', title: 'BRISQUE', hint: '无参考质量评分 · 通常越低越好', digits: 2, maximum: 100}];
-
-  const grid = $('quality-chart-grid');
-  grid.replaceChildren();
-  for (const metric of metrics) {
-    const finite = entries.map(entry => entry.scores[metric.id]).filter(Number.isFinite);
-    const min = Math.min(0, ...finite);
-    const highest = Math.max(0, ...finite);
-    const max = metric.maximum ? Math.max(metric.maximum, highest) : Math.max(10, Math.ceil(highest / 10) * 10);
-    const percent = value => (value - min) / (max - min) * 100;
-    const zero = percent(0);
-
-    const chart = node('section', undefined, 'quality-chart');
-    const title = node('h4', metric.title);
-    title.id = `quality-${metric.id}`;
-    chart.setAttribute('aria-labelledby', title.id);
-    chart.append(title, node('p', metric.hint, 'muted'));
-    const list = node('ul', undefined, 'quality-bars');
-    const notes = new Set();
-    entries.forEach(({name, scores}, index) => {
-      const value = scores[metric.id];
-      const label = value === '∞' ? '∞（完全一致）' : format(value, metric.digits);
-      const row = node('li');
-      const caption = node('div', undefined, 'quality-bar-label');
-      caption.append(node('span', name), node('strong', label));
-      row.append(caption);
-
-      const track = node('div', undefined, 'quality-bar-track');
-      track.setAttribute('aria-hidden', 'true');
-      if (Number.isFinite(value)) {
-        const fill = node('span', undefined, index ? 'quality-bar-fill' : 'quality-bar-fill quality-bar-input');
-        const end = percent(value);
-        fill.style.left = `${Math.min(zero, end)}%`;
-        fill.style.width = `${Math.abs(end - zero)}%`;
-        track.append(fill);
-      } else if (value !== '∞') {
-        scores.quality_notes?.forEach(note => notes.add(note));
-      }
-      if (min < 0) {
-        const marker = node('span', undefined, 'quality-bar-zero');
-        marker.style.left = `${zero}%`;
-        track.append(marker);
-      }
-      row.append(track);
-      list.append(row);
-    });
-    const scale = node('div', undefined, 'quality-chart-scale');
-    scale.setAttribute('aria-hidden', 'true');
-    scale.append(node('span', String(min)), node('span', String(max)));
-    chart.append(list, scale);
-    for (const note of notes) chart.append(node('p', note, 'muted'));
-    grid.append(chart);
-  }
-  $('quality-charts').hidden = false;
 }
 function showSummary() {
   const first = results[0], hasReference = first.reference_provided;
@@ -198,7 +132,7 @@ function showSummary() {
 function format(value, digits = 3) { return value === null || value === undefined ? '未测量' : typeof value === 'number' ? value.toFixed(digits) : value; }
 function addResult(result) {
   const experiment = tab === 'experiment';
-  showQualityCharts();
+  renderSingleImageCharts(results);
   const article = node('article', undefined, 'result');
   article.dataset.resultId = result.id;
   if (result.resized) article.append(node('p', `原图 ${result.original_width} × ${result.original_height}，已等比例缩小至 ${result.width} × ${result.height}；下载图片为此尺寸。`, 'muted'));

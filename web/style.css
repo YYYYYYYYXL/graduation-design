@@ -76,21 +76,14 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .remove-image { padding: 5px 10px; font-size: 13px; }
 #clear-image { margin-top: 12px; }
 
-#quality-charts { margin-bottom: 24px; }
-#quality-charts-title { margin: 0 0 10px; }
-.quality-chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 14px; }
-.quality-chart { min-width: 0; padding: 16px; border: 1px solid #e0e4e7; border-radius: 8px; }
-.quality-chart h4 { margin: 0; font-size: 16px; }
-.quality-chart p { margin: 4px 0 0; }
-.quality-bars { display: grid; gap: 12px; list-style: none; padding: 0; margin: 14px 0 0; }
-.quality-bar-label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
-.quality-bar-label span { overflow-wrap: anywhere; }
-.quality-bar-label strong { flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.quality-bar-track { position: relative; height: 8px; margin-top: 5px; overflow: hidden; background: #edf2f3; border-radius: 4px; }
-.quality-bar-fill { position: absolute; top: 0; bottom: 0; background: #146771; border-radius: 4px; }
-.quality-bar-input { background: #77878f; }
-.quality-bar-zero { position: absolute; top: 0; bottom: 0; border-left: 1px solid #263238; }
-.quality-chart-scale { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: #63747c; }
+#single-score-charts { margin-bottom: 24px; }
+#single-score-title { margin: 0 0 10px; color: #193e47; font-size: 19px; }
+.single-score-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 12px; }
+.single-score-card { min-width: 0; padding: clamp(10px, 2vw, 16px); border: 1px solid #d8e6e8; border-radius: 12px; background: #f7fbfb; }
+.single-score-card h4 { margin: 0; color: #193e47; font-size: 16px; }
+.single-score-card p { margin: 4px 0 0; }
+.single-score-plot { margin-top: 10px; min-height: 174px; border: 1px solid #dee9eb; border-radius: 8px; background: white; }
+.single-score-details { margin: 10px 0 0; padding-left: 18px; color: #526a74; font-size: 13px; }
 
 .nav-link { display: inline-flex; align-items: center; padding: 8px 16px; border-radius: 6px; font-size: 14px; text-decoration: none; color: #344750; }
 .nav-link:hover { background: #eff4f5; }
