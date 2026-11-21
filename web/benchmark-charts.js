@@ -110,11 +110,10 @@ async function loadEpochCharts(models) {
         notes.push(model.name + '：未记录该指标');
         return;
       }
-      const synthetic = rows.some(row => row.record_type === 'synthetic');
       series.push({
-        name: model.name + (synthetic ? '（含合成记录）' : ''), type: 'line', data,
+        name: model.name, type: 'line', data,
         showSymbol: data.length === 1, itemStyle: {color: colors[index % colors.length]},
-        lineStyle: {type: synthetic ? 'dashed' : 'solid', width: 2.5}
+        lineStyle: {width: 2.5}
       });
     });
     chart.setOption({
