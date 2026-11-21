@@ -40,7 +40,7 @@ function imageFigure(label, url, onRemove) {
 function displayResult(result) {
   const images = node('div', undefined, 'images');
   images.append(imageFigure('输入图', result.input_url), imageFigure('去噪结果', result.output_url, clearResults));
-  const download = node('a', '下载去噪结果');
+  const download = node('a', '下载去噪结果', 'action-link');
   download.href = result.output_url + '?download=1'; download.download = '';
   $('results').append(node('h3', result.model_name), images, download);
   const score = value => Number.isFinite(value) ? value.toFixed(2) : '未测量';
@@ -70,11 +70,16 @@ $('denoise-form').onsubmit = async event => {
 async function init() {
   const [models, settings] = await Promise.all([api('/api/models'), api('/api/settings')]);
   defaultModel = settings.default_model;
-  available = models.some(model => model.id === defaultModel && model.available);
+  const model = models.find(item => item.id === defaultModel);
+  $('model-name').textContent = model?.name || defaultModel;
+  available = Boolean(model?.available);
   if (!available) $('selection-error').textContent = '默认模型权重不可用。';
   updateSubmit();
 }
-init().catch(error => { $('status').className = 'error'; $('status').textContent = error.message; });
+init().catch(error => {
+  $('model-name').textContent = '读取失败';
+  $('status').className = 'error'; $('status').textContent = error.message;
+});
 $('image').onchange = async () => {
   validImage = false; updateSubmit();
   $('selection-error').textContent = ''; $('status').textContent = '';
