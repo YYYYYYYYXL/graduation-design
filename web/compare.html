@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>多模型效果对比 · 图像去噪系统</title>
-  <link rel="stylesheet" href="/static/style.css?v=25">
+  <link rel="stylesheet" href="/static/compare.css?v=1">
 </head>
 <body>
   <header>
@@ -12,8 +12,42 @@
     <nav aria-label="功能页面"><a class="nav-link" href="/">单图去噪</a><a class="nav-link active" aria-current="page" href="/compare">多模型效果对比</a></nav>
   </header>
   <main class="benchmark">
-    <section class="panel">
+    <div class="dashboard-title">
       <h1>多模型效果对比</h1>
+      <a class="action-link" href="#settings">评测配置 <span aria-hidden="true">↓</span></a>
+    </div>
+    <section class="panel" aria-labelledby="epoch-title">
+      <div class="section-title">
+        <h2 id="epoch-title">训练曲线</h2>
+        <label class="batch-picker">纵轴指标 <select id="epoch-metric" disabled></select></label>
+      </div>
+      <div id="epoch-chart" class="model-plot" aria-label="按 Epoch 对比各模型的训练记录"></div>
+      <p id="epoch-note" class="muted" role="status">正在读取训练日志…</p>
+    </section>
+    <div id="batch-report" hidden>
+      <section class="panel" aria-labelledby="report-title">
+        <div class="section-title">
+          <h2 id="report-title">评测记录</h2>
+          <label class="batch-picker">历史评测 <select id="batch-runs"></select></label>
+        </div>
+        <p id="batch-state" role="status"></p>
+        <progress id="batch-progress" max="1" value="0" aria-label="评测进度"></progress>
+        <div class="links"><a id="batch-summary-csv">下载汇总 CSV</a><a id="batch-images-csv">下载逐图 CSV</a></div>
+      </section>
+      <section class="panel" aria-labelledby="quality-title">
+        <div class="section-title"><h2 id="quality-title">测试集去噪效果</h2></div>
+        <div id="batch-summary" class="table-scroll"></div>
+      </section>
+      <section class="panel" aria-labelledby="cost-title">
+        <div class="section-title">
+          <h2 id="cost-title">模型开销</h2>
+          <label class="batch-picker">测试组 <select id="cost-group"></select></label>
+        </div>
+        <div id="model-costs" class="table-scroll"></div>
+      </section>
+    </div>
+    <section class="panel" id="settings" aria-labelledby="settings-title">
+      <div class="section-title"><h2 id="settings-title">评测配置</h2></div>
       <form id="batch-form">
         <fieldset><legend>参评模型与基线</legend><div id="batch-models" class="table-scroll"></div></fieldset>
         <fieldset><legend>共同测试集</legend><div id="batch-groups" class="checks"></div></fieldset>
@@ -25,31 +59,9 @@
         <p id="batch-error" class="error" role="alert"></p>
       </form>
     </section>
-    <section class="panel" aria-labelledby="epoch-title">
-      <div class="section-title">
-        <h2 id="epoch-title">各模型训练曲线</h2>
-        <label class="batch-picker">纵轴指标 <select id="epoch-metric" disabled></select></label>
-      </div>
-      <div id="epoch-chart" class="model-plot" aria-label="按 Epoch 对比各模型的训练记录"></div>
-      <p id="epoch-note" class="muted" role="status">正在读取训练日志…</p>
-    </section>
-    <section id="batch-report" class="panel" hidden>
-      <div class="section-title">
-        <h2>评测汇总</h2>
-        <label class="batch-picker">历史评测 <select id="batch-runs"></select></label>
-      </div>
-      <p id="batch-state" role="status"></p>
-      <progress id="batch-progress" max="1" value="0" aria-label="评测进度"></progress>
-      <h3>多模型定量对比</h3>
-      <div id="batch-summary" class="table-scroll"></div>
-      <h3>模型开销</h3>
-      <label>测试组 <select id="cost-group"></select></label>
-      <div id="model-costs" class="table-scroll"></div>
-      <div class="links"><a id="batch-summary-csv">下载汇总 CSV</a><a id="batch-images-csv">下载逐图 CSV</a></div>
-    </section>
   </main>
   <script src="/static/vendor/echarts/echarts.common.min.js" defer></script>
-  <script src="/static/benchmark-charts.js?v=27" defer></script>
+  <script src="/static/benchmark-charts.js?v=28" defer></script>
   <script src="/static/benchmark.js?v=27" defer></script>
 </body>
 </html>

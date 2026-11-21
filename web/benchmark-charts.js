@@ -102,13 +102,13 @@ async function loadEpochCharts(models) {
     note.textContent = [metrics.length ? '图表组件不可用' : '暂无训练曲线', ...unavailable].join('。');
     return;
   }
-  const chart = echarts.init(host, null, {renderer: 'svg'});
+  const chart = echarts.init(host, 'dark', {renderer: 'svg'});
   picker.replaceChildren(...metrics.map(metric => new Option(metric.label, metric.label)));
   picker.disabled = false;
   function draw() {
     const metric = metrics[picker.selectedIndex];
     const notes = [...unavailable], series = [];
-    const colors = ['#195c80', '#ad4d17', '#007754', '#834582', '#676619', '#4c5369'];
+    const colors = ['#60d8c8', '#efb875', '#81afff', '#c29bfa', '#ed899e', '#bccc8c'];
     histories.forEach(({model, rows}, index) => {
       if (!rows) return;
       const data = rows.map(row => [row.epoch, metric.keys.map(key => logNumber(row[key]))
@@ -124,12 +124,13 @@ async function loadEpochCharts(models) {
       });
     });
     chart.setOption({
-      animation: false, backgroundColor: '#fff',
+      animation: false, backgroundColor: '#121922',
+      textStyle: {color: '#b6c4d4'},
       legend: {type: 'scroll', left: 8, right: 8, bottom: 4},
       grid: {left: 16, right: 25, top: 48, bottom: 90, containLabel: true},
       tooltip: {trigger: 'axis', renderMode: 'richText', confine: true},
-      xAxis: {type: 'value', name: 'Epoch', nameLocation: 'middle', nameGap: 32, minInterval: 1},
-      yAxis: {type: 'value', name: metric.label, scale: true, nameTextStyle: {align: 'left'}},
+      xAxis: {type: 'value', splitLine: {show: false}, name: 'Epoch', nameLocation: 'middle', nameGap: 32, minInterval: 1},
+      yAxis: {type: 'value', name: metric.label, splitLine: {lineStyle: {color: '#2a3542'}}, scale: true, nameTextStyle: {align: 'left'}},
       toolbox: {right: 8, feature: {saveAsImage: {type: 'svg', title: '导出曲线图'}}},
       series
     }, true);
