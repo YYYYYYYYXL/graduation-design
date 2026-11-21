@@ -10,13 +10,16 @@ function benchmarkTables(report) {
     return groupName(id) + (row ? ' · ' + row.compared + '/' + row.total + ' 张' : '');
   }
   function metricCells(dataset, metric, digits) {
+    const baseline = get(dataset, 'input');
+    const rank = !report.preview && report.models.length > 1 && baseline?.compared > 1 &&
+      baseline.compared === baseline.total;
     const scores = report.models.map(model => get(dataset, model.id)?.[metric]);
     const values = scores.map(value => value === '∞' ? Infinity :
       Number.isFinite(value) ? Number(value.toFixed(digits)) : null);
     const best = Math.max(...values.filter(value => value !== null));
     return scores.map((score, i) => {
       const cell = element('td'), label = fmt(score, digits);
-      if (values[i] === best) cell.append(element('strong', label));
+      if (rank && values[i] === best) cell.append(element('strong', label));
       else cell.textContent = label;
       return cell;
     });
@@ -47,13 +50,19 @@ function benchmarkTables(report) {
 
 function drawCosts() {
   const rows = report.rows.filter(row => row.dataset === byId('cost-group').value && row.model !== 'input');
-  const {table, body} = buildTable(['模型', '参数量 (M)', '权重文件 (MiB)', '设备', '平均耗时 (s/张)', '计分 / 总样本', '失败数']);
+  const columns = [['模型', row => row.name]];
+  if (rows.some(row => Number.isFinite(row.parameters))) {
+    columns.push(['参数量 (M)', row => Number.isFinite(row.parameters) ? fmt(row.parameters / 1e6, 3) : '—']);
+  }
+  if (rows.some(row => Number.isFinite(row.weights_bytes))) {
+    columns.push(['权重文件 (MiB)', row => Number.isFinite(row.weights_bytes) ? fmt(row.weights_bytes / 1048576, 2) : '—']);
+  }
+  columns.push(['设备', row => row.device || '—'], ['平均耗时 (s/张)', row => fmt(row.seconds, 3)],
+    ['计分 / 总样本', row => row.compared + ' / ' + row.total], ['失败数', row => row.failed]);
+  const {table, body} = buildTable(columns.map(([name]) => name));
   for (const row of rows) {
     const tr = body.insertRow();
-    for (const value of [row.name, Number.isFinite(row.parameters) ? fmt(row.parameters / 1e6, 3) : '—',
-      Number.isFinite(row.weights_bytes) ? fmt(row.weights_bytes / 1048576) : '—', row.device || '—', fmt(row.seconds, 3), row.compared + ' / ' + row.total, row.failed]) {
-      tr.insertCell().textContent = value;
-    }
+    for (const [, value] of columns) tr.insertCell().textContent = value(row);
   }
   byId('model-costs').replaceChildren(table);
 }
@@ -62,9 +71,7 @@ const epochMetrics = [
   {label: '验证 PSNR (dB)', keys: ['val_psnr', 'val_psnr_mean']},
   {label: '验证 SSIM', keys: ['val_ssim']},
   {label: '训练 MSE', keys: ['train_mse']},
-  {label: '训练 L1', keys: ['train_l1']},
-  {label: '每轮耗时 (s)', keys: ['seconds']},
-  {label: '学习率', keys: ['lr']}
+  {label: '训练 L1', keys: ['train_l1']}
 ];
 
 function logNumber(value) {

@@ -8,7 +8,6 @@ const element = (tag, text, className) => {
 const fmt = (value, digits = 2) => typeof value === 'number' ? value.toFixed(digits) : value ?? '—';
 const base = '/api/benchmark/runs';
 let groups = [], activeId = '', report = null, pollTimer, starting = false, running = false;
-let page = 1, sampleRequest = 0;
 
 async function json(url, options) {
   const response = await fetch(url, {cache: 'no-store', ...options});
@@ -69,10 +68,9 @@ function drawSummary() {
   byId('batch-state').textContent = `${report.preview ? '预览 · 每组 1 张 · ' : ''}${state} · 已处理 ${done}/${total} 项${report.error ? ` · ${report.error}` : ''}`;
   byId('batch-progress').max = total;
   byId('batch-progress').value = done;
-  return done;
 }
 
-async function refreshReport(id, previousDone = -1) {
+async function refreshReport(id) {
   try {
     const data = await json(`${base}/${id}`);
     if (id !== activeId) return;
@@ -80,13 +78,9 @@ async function refreshReport(id, previousDone = -1) {
     report = data;
     running = report.state === 'running';
     updateControls();
-    const done = drawSummary();
+    drawSummary();
     if (first) {
-      byId('batch-report').hidden = byId('batch-samples').hidden = false;
-      const filter = byId('batch-filter');
-      filter.replaceChildren(new Option('所有测试组', ''));
-      report.datasets.forEach(group => filter.add(new Option(groupName(group), group)));
-      byId('batch-search').value = '';
+      byId('batch-report').hidden = false;
       if (![...byId('batch-runs').options].some(option => option.value === id)) {
         byId('batch-runs').prepend(runOption(report));
       }
@@ -95,14 +89,11 @@ async function refreshReport(id, previousDone = -1) {
 
     if (first) byId('cost-group').replaceChildren(...report.datasets.map(id => new Option(groupName(id), id)));
     drawCosts();
-    if (first || done !== previousDone) {
-      loadSamples().catch(showError);
-    }
-    if (running) pollTimer = setTimeout(() => refreshReport(id, done), 2000);
+    if (running) pollTimer = setTimeout(() => refreshReport(id), 2000);
   } catch (error) {
     if (id !== activeId) return;
     showError(error);
-    if (running) pollTimer = setTimeout(() => refreshReport(id, previousDone), 4000);
+    if (running) pollTimer = setTimeout(() => refreshReport(id), 4000);
   }
 }
 
@@ -114,29 +105,10 @@ function runOption(run) {
 function openRun(id) {
   clearTimeout(pollTimer);
   activeId = id;
-  report = null; page = 1;
-  byId('batch-report').hidden = byId('batch-samples').hidden = true;
+  report = null;
+  byId('batch-report').hidden = true;
   history.replaceState(null, '', `?run=${encodeURIComponent(id)}`);
   return refreshReport(id);
-}
-
-async function loadSamples() {
-  const id = activeId, version = ++sampleRequest;
-  const params = new URLSearchParams({dataset: byId('batch-filter').value, search: byId('batch-search').value, page});
-  const data = await json(`${base}/${id}/samples?${params}`);
-  if (id !== activeId || version !== sampleRequest) return;
-  const {table, body} = buildTable(['输入文件', '测试组', '输入 PSNR (dB)', '输入 SSIM', '结果']);
-  data.items.forEach(sample => {
-    const row = body.insertRow();
-    [sample.filename, groupName(sample.dataset), fmt(sample.psnr), fmt(sample.ssim, 4),
-      sample.error ? '参考评分失败' : `${sample.ready}/${report.models.length} 个方法`]
-      .forEach(value => { row.insertCell().textContent = value; });
-  });
-  byId('batch-sample-list').replaceChildren(data.total ? table : element('p', '没有匹配的样本。', 'muted'));
-  page = data.page;
-  byId('batch-prev').disabled = page <= 1;
-  byId('batch-next').disabled = page * data.page_size >= data.total;
-  byId('batch-page').textContent = `第 ${page} / ${Math.max(1, Math.ceil(data.total / data.page_size))} 页 · ${data.total} 张`;
 }
 
 byId('batch-form').onsubmit = async event => {
@@ -158,11 +130,6 @@ byId('batch-form').onsubmit = async event => {
   }
 };
 byId('batch-runs').onchange = event => { showError(null); openRun(event.target.value); };
-byId('batch-prev').onclick = () => { page--; loadSamples().catch(showError); };
-byId('batch-next').onclick = () => { page++; loadSamples().catch(showError); };
-byId('batch-filter').onchange = byId('batch-search').oninput = () => {
-  page = 1; loadSamples().catch(showError);
-};
 async function initialize() {
   const [datasets, models, recent] = await Promise.all([json('/api/benchmark/datasets'), json('/api/models'), json(base)]);
   loadEpochCharts(models).catch(error => { byId('epoch-note').textContent = error.message; });
