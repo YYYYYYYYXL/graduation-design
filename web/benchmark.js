@@ -66,6 +66,8 @@ function drawSummary() {
     interrupted: '评测已中断', failed: '评测失败',
   }[report.state];
   byId('batch-state').textContent = `${report.preview ? '预览 · 每组 1 张 · ' : ''}${state} · 已处理 ${done}/${total} 项${report.error ? ` · ${report.error}` : ''}`;
+  byId('batch-state').hidden = report.state === 'complete' && !report.preview && !report.error;
+  byId('batch-progress').hidden = report.state !== 'running';
   byId('batch-progress').max = total;
   byId('batch-progress').value = done;
 }

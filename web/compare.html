@@ -25,18 +25,15 @@
       <p id="epoch-note" class="muted" role="status">正在读取训练日志…</p>
     </section>
     <div id="batch-report" hidden>
-      <section class="panel" aria-labelledby="report-title">
+      <section class="panel" aria-labelledby="quality-title">
         <div class="section-title">
-          <h2 id="report-title">评测记录</h2>
+          <h2 id="quality-title">测试集去噪效果</h2>
           <label class="batch-picker">历史评测 <select id="batch-runs"></select></label>
         </div>
-        <p id="batch-state" role="status"></p>
-        <progress id="batch-progress" max="1" value="0" aria-label="评测进度"></progress>
-        <div class="links"><a id="batch-summary-csv">下载汇总 CSV</a><a id="batch-images-csv">下载逐图 CSV</a></div>
-      </section>
-      <section class="panel" aria-labelledby="quality-title">
-        <div class="section-title"><h2 id="quality-title">测试集去噪效果</h2></div>
+        <p id="batch-state" role="status" hidden></p>
+        <progress id="batch-progress" max="1" value="0" aria-label="评测进度" hidden></progress>
         <div id="batch-summary" class="table-scroll"></div>
+        <div class="links"><a id="batch-summary-csv">下载汇总 CSV</a><a id="batch-images-csv">下载逐图 CSV</a></div>
       </section>
       <section class="panel" aria-labelledby="cost-title">
         <div class="section-title">
@@ -62,6 +59,6 @@
   </main>
   <script src="/static/vendor/echarts/echarts.common.min.js" defer></script>
   <script src="/static/benchmark-charts.js?v=28" defer></script>
-  <script src="/static/benchmark.js?v=27" defer></script>
+  <script src="/static/benchmark.js?v=28" defer></script>
 </body>
 </html>
