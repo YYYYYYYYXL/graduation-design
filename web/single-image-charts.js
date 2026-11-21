@@ -24,8 +24,6 @@ function renderSingleImageCharts(results) {
     tr.insertCell().textContent = index ? result.device.toUpperCase() : '—';
   }
   host.append(table);
-  host.append(node('p', paired ? 'Δ 为该方法减去带噪输入的整图分数，正值表示改善。'
-    : 'Δ 为该方法减去带噪输入的 BRISQUE 分数，负值表示该无参考指标改善。', 'muted'));
   if (!paired) {
     for (const row of rows) for (const note of row.metrics.quality_notes || []) {
       host.append(node('p', row.model_name + ' · ' + note, 'muted'));

@@ -28,7 +28,6 @@ function selectTab(next) {
   for (const id of ['experiment-input', 'experiment-options']) {
     $(id).hidden = !experiment; $(id).disabled = !experiment;
   }
-  $('intro').textContent = experiment ? '同一张图片，看看不同方法去噪后的区别。' : '减少照片里的颗粒噪点。上传照片后直接开始处理。';
   $('form-title').textContent = experiment ? '实验对比' : '图片去噪';
   $('result-title').textContent = experiment ? '对比结果' : '去噪结果';
   $('export').hidden = !experiment;
@@ -41,19 +40,12 @@ function updateMode() {
   $('upload-label').textContent = tab === 'normal' ? '上传图片' : clean ? '上传清晰照片' : '上传带噪照片';
   $('noise-options').hidden = !clean; $('noise-level').disabled = !clean;
   $('reference-options').hidden = clean; $('reference').disabled = clean;
-  updateMetricGuide();
   updateSubmit();
-}
-function updateMetricGuide() {
-  const paired = $('synthetic').checked || $('reference').files.length > 0;
-  $('metric-guide').textContent = paired
-    ? 'PSNR、SSIM 越高通常越接近干净图。可以结合用时和放大图比较。'
-    : 'BRISQUE 越低通常表示感知质量越好。可以结合放大图查看纹理和边缘。';
 }
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
 document.querySelectorAll('[name="input-mode"]').forEach(radio => radio.onchange = () => { clearResults(); updateMode(); });
-$('clear-reference').onclick = () => { $('reference').value = ''; clearResults(); updateMetricGuide(); };
-$('reference').onchange = () => { clearResults(); updateMetricGuide(); };
+$('clear-reference').onclick = () => { $('reference').value = ''; clearResults(); };
+$('reference').onchange = clearResults;
 $('clear-image').onclick = () => {
   if (processing) return;
   $('image').value = ''; validImage = false;
@@ -103,15 +95,9 @@ function imageFigure(label, url, onRemove = () => removeImageViews(url)) {
   link.append(img); figure.append(caption, link); return figure;
 }
 function showSummary() {
-  const first = results[0], hasReference = first.reference_provided;
+  const first = results[0];
   const summary = $('comparison-summary'); summary.replaceChildren(); summary.hidden = false;
-  summary.append(node('p', hasReference ? 'PSNR、SSIM 越高通常越接近参考图。先看去噪前的基线，再比较各方法。' : 'BRISQUE 越低通常表示感知质量越好。请结合放大图检查细节。', 'metric-guide'));
-  summary.append(node('p', `本次处理 ${first.width} × ${first.height} 像素 · ${first.synthetic ? `合成高斯噪声 σ=${first.requested_sigma} · 随机种子 ${first.seed}` : '上传的带噪照片，未额外加噪'}${first.resized ? ` · 原图 ${first.original_width} × ${first.original_height} 已缩小，指标针对缩小后的图片` : ''}`, 'muted'));
-  const help = node('details'); help.append(node('summary', '怎么看这些指标和用时？'));
-  help.append(node('p', 'BM3D 的去噪耗时包含噪声估计，神经网络的去噪耗时包含分块和设备传输。解读速度时请结合计时设备。' + (results.some(r => r.tiled) ? '部分结果使用分块推理。' : ''), 'muted'));
-  help.append(node('p', '导出 CSV 可查看噪声估计、加载时间、总处理时间和参数量等明细。', 'muted'));
-  help.append(node('p', '这张图的结果不代表所有照片。可以比较同一网络的 DIV2K 与 SIDD 两个版本，但差异也受训练设置影响；也可以比较五个模型与 BM3D。P2N 为现有网络直接推理。', 'muted'));
-  summary.append(help);
+  summary.append(node('p', `处理尺寸 ${first.width} × ${first.height} 像素 · ${first.synthetic ? `合成高斯噪声 σ=${first.requested_sigma} · 随机种子 ${first.seed}` : '带噪输入'}${first.resized ? ` · 原图 ${first.original_width} × ${first.original_height}` : ''}`, 'muted'));
 }
 function format(value, digits = 3) { return value === null || value === undefined ? '未测量' : typeof value === 'number' ? value.toFixed(digits) : value; }
 function addResult(result) {
@@ -119,7 +105,7 @@ function addResult(result) {
   renderSingleImageCharts(results);
   const article = node('article', undefined, 'result');
   article.dataset.resultId = result.id;
-  if (result.resized) article.append(node('p', `原图 ${result.original_width} × ${result.original_height}，已等比例缩小至 ${result.width} × ${result.height}；下载图片为此尺寸。`, 'muted'));
+  if (result.resized) article.append(node('p', `原图 ${result.original_width} × ${result.original_height} →  ${result.width} × ${result.height} px`, 'muted'));
   if (experiment) {
     article.append(node('h3', result.model_name));
     if (results.length === 1) {
@@ -168,11 +154,12 @@ function drawDetails() {
   const {width, height} = results[0];
   const crop = cropRegion(width, height, $('detail-size').value, $('detail-x').value, $('detail-y').value);
   const {left, top, size} = crop;
-  $('detail-location').textContent = `区域左上角 (${left}, ${top})，取 ${size} × ${size} 个原始像素，同倍数放大。`;
+  $('detail-location').textContent = `ROI (${left}, ${top}) · ${size} × ${size} px`;
   const target = detailImages.find(item => item.isReference);
   const mode = $('detail-mode');
   mode.options[1].disabled = !target?.ready;
   if (!target?.ready) mode.value = 'detail';
+  $('detail-legend').hidden = mode.value !== 'error';
   $('detail-legend').textContent = plateModes[mode.value];
   $('detail-legend').classList.toggle('error-scale', mode.value === 'error');
   $('detail-png').disabled = !detailImages.some(item => item.ready);
@@ -241,7 +228,6 @@ async function init() {
     check.type = 'checkbox'; check.className = 'compare-item'; check.value = model.id;
     check.checked = true;
     label.append(check, document.createTextNode(model.name));
-    if (model.id === 'p2n_div2k') label.append(node('small', '使用现有网络直接推理'));
     $('compare-models').append(label);
     check.onchange = updateSubmit;
   });
@@ -273,13 +259,13 @@ $('image').onchange = async () => {
     if (previewUrl !== url) return;
     if (Math.min(img.naturalWidth, img.naturalHeight) < 11 || img.naturalWidth * img.naturalHeight > 100000000) throw new Error('图片每边至少 11 像素，原图总像素不超过 1 亿。');
     $('preview-image').src = url;
-    $('file-info').textContent = `${file.name} · ${img.naturalWidth} × ${img.naturalHeight}${img.naturalWidth * img.naturalHeight > 4000000 ? " · 大图将自动缩小后去噪" : ""}`;
+    $('file-info').textContent = `${file.name} · ${img.naturalWidth} × ${img.naturalHeight}`;
     $('preview').hidden = false; validImage = true;
   } catch (error) {
     if (previewUrl !== url) return;
     if (/\.hei[cf]$/i.test(file.name) || /^image\/hei[cf]/i.test(file.type)) {
       $('preview-image').hidden = true; $('preview').hidden = false;
-      $('file-info').textContent = `${file.name} · 浏览器无法预览此格式，可以直接开始处理；系统会读取照片并自动调整大图尺寸。`;
+      $('file-info').textContent = `${file.name} · 预览不可用`;
       validImage = true;
     } else $('selection-error').textContent = error.message.startsWith('图片') ? error.message : '无法读取图片，请选择 JPG、PNG、WebP、BMP 或 HEIC/HEIF 文件。';
   }

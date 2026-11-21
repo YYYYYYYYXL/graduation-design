@@ -66,6 +66,6 @@ function exportPlate(grid, title, region, mode) {
 }
 
 const plateModes = {
-  detail: '上排为全图及取样框，下排为同一区域的最近邻放大。分数按整张图计算。',
-  error: '下排为相对干净参考图的 RGB 通道平均绝对误差。黑色为 0，白色为 32 及以上（8-bit 灰度级）。'
+  detail: '纹理细节',
+  error: 'RGB 平均绝对误差 · 0–32（8-bit）'
 };

@@ -76,7 +76,6 @@ function drawSummary() {
       }
       const name = element('th', row.name, 'batch-model-name'); name.scope = 'row'; tr.append(name);
       if (input) tr.className = 'baseline';
-      if (row.model === 'p2n_div2k') name.append(element('small', '预训练权重直接推理'));
       for (const [key, digits] of Object.entries(precision)) {
         const value = fmt(row[key], digits);
         const num = value === '∞' ? Infinity : Number(value);
@@ -197,6 +196,7 @@ function updateCrops() {
   const mode = byId('batch-mode');
   mode.options[1].disabled = !target?.naturalWidth;
   if (!target?.naturalWidth) mode.value = 'detail';
+  byId('batch-legend').hidden = mode.value !== 'error';
   byId('batch-legend').textContent = plateModes[mode.value];
   byId('batch-legend').classList.toggle('error-scale', mode.value === 'error');
   cropImages.forEach(({image, canvas}) => {
@@ -284,7 +284,7 @@ async function initialize() {
   groups = datasets;
   groups.forEach(group => addChoice('batch-groups', group, group.label, group.error || `${group.count} 张测试图`, group.count > 0));
   models.forEach(model => addChoice('batch-models', model, model.name,
-    model.available ? (model.method === 'p2n' ? '预训练权重直接推理' : '') : '缺少权重', model.available));
+    model.available ? '' : '缺少权重', model.available));
   byId('batch-runs').replaceChildren(...recent.map(runOption));
   updateControls();
   const requested = new URLSearchParams(location.search).get('run');

@@ -60,7 +60,7 @@ async function updateBenchmarkCharts(data) {
     updateComparators();
   }
   if (data.state === 'running') {
-    distributionMessage('评测结束后显示逐图配对分布。当前共同样本均值见上表。');
+    distributionMessage('等待评测完成');
     return;
   }
   if (imageRecords) { drawDistribution(); return; }
@@ -100,7 +100,7 @@ function drawDistribution() {
   const pair = field('method').selectedOptions[0].text + ' − ' + field('base').selectedOptions[0].text;
   const context = groupName(dataset) + ' · ' + pair + ' · 有效 ' + n + '/' + baseline.total
     + ' 张（未共同成功 ' + (baseline.total - baseline.compared) + '，差值非有限或缺失 ' + (baseline.compared - n) + '）';
-  distributionMessage(context + (n ? '' : ' · 尚无可比较的有限差值。'));
+  distributionMessage(context);
   if (!n) return;
   const higher = values.filter(v => v > 0).length, tied = values.filter(v => v === 0).length;
   const {table, body} = buildTable(['Δ 中位数', '第 25 / 75 百分位', '改善 / 持平 / 下降（张）']);
@@ -110,7 +110,7 @@ function drawDistribution() {
     [higher, tied, n - higher - tied].join(' / ')].forEach(v => row.insertCell().textContent = v);
   field('stats').append(table);
   if (n < 2 || !window.echarts) {
-    field('context').textContent += n < 2 ? ' · 单例仅报告观测值。' : ' · 图形组件不可用。';
+    if (!window.echarts) field('context').textContent += ' · 图形组件不可用';
     return;
   }
   const points = [];
