@@ -58,28 +58,35 @@ function buildTable(headings) {
 }
 
 function drawSummary() {
-  const {table, body} = buildTable(['模型 / 方法', ...report.datasets.map(groupName)]);
-  const rows = new Map(report.rows.map(row => [`${row.dataset}/${row.model}`, row]));
-  for (const model of [{id: 'input', name: '去噪前'}, ...report.models]) {
-    const tr = body.insertRow();
-    if (model.id === 'input') tr.className = 'baseline';
-    const name = element('th', model.name, 'batch-model-name');
-    name.scope = 'row';
-    if (model.id === 'p2n_div2k') name.append(element('small', '预训练权重直接推理'));
-    tr.append(name);
-    for (const dataset of report.datasets) {
-      const row = rows.get(`${dataset}/${model.id}`);
-      const cell = tr.insertCell();
-      const delta = row.delta_psnr === null || row.delta_psnr === undefined ? ''
-        : ` · Δ ${signed(row.delta_psnr, 2)} dB`;
-      cell.append(element('strong', `${fmt(row.psnr)} dB / ${fmt(row.ssim, 4)}`));
-      cell.append(element('small', model.id === 'input'
-        ? `共同计分 ${row.compared}/${row.total} 张`
-        : `成功 ${row.done - row.failed}/${row.total} 张${row.failed ? ` · 失败 ${row.failed} 张` : ''}${delta}`));
-      if (row.seconds !== null && row.seconds !== undefined) {
-        cell.append(element('small', `${fmt(row.seconds, 3)} s/张 · ${row.device.toUpperCase()}`));
-      }
+  const {table, body} = buildTable(['测试组 · 共同计分', '方法', 'PSNR ↑ (dB)', 'SSIM ↑', 'ΔPSNR (dB)', '耗时 (s/张)', '设备', '失败数']);
+  const precision = {psnr: 2, ssim: 4};
+  for (const dataset of report.datasets) {
+    const rows = report.rows.filter(row => row.dataset === dataset);
+    const best = {};
+    for (const [key, digits] of Object.entries(precision)) {
+      const measured = rows.filter(row => row.model !== 'input').map(row => row[key] === '∞'
+        ? Infinity : Number.isFinite(row[key]) ? Number(row[key].toFixed(digits)) : -Infinity);
+      best[key] = Math.max(...measured);
     }
+    rows.forEach((row, index) => {
+      const tr = body.insertRow(), input = row.model === 'input';
+      if (!index) {
+        const group = element('th', groupName(dataset)); group.rowSpan = rows.length;
+        group.append(element('small', row.compared + '/' + row.total + ' 张')); tr.append(group);
+      }
+      const name = element('th', row.name, 'batch-model-name'); name.scope = 'row'; tr.append(name);
+      if (input) tr.className = 'baseline';
+      if (row.model === 'p2n_div2k') name.append(element('small', '预训练权重直接推理'));
+      for (const [key, digits] of Object.entries(precision)) {
+        const value = fmt(row[key], digits);
+        const num = value === '∞' ? Infinity : Number(value);
+        const cell = tr.insertCell();
+        if (!input && num === best[key]) cell.append(element('strong', value));
+        else cell.textContent = value;
+      }
+      [signed(row.delta_psnr, 2), fmt(row.seconds, 3), row.device?.toUpperCase() || '—',
+        input ? '—' : row.failed].forEach(value => tr.insertCell().textContent = value);
+    });
   }
   byId('batch-summary').replaceChildren(table);
   byId('batch-summary-csv').href = `${base}/${activeId}/summary.csv`;
@@ -177,7 +184,7 @@ function closeDetail() {
   byId('batch-views').replaceChildren();
   byId('batch-crops').replaceChildren();
   byId('batch-detail').hidden = true;
-  byId('batch-crop').open = false;
+  byId('batch-crop').open = true; byId('batch-mode').value = 'detail';
 }
 
 function updateCrops() {
@@ -186,9 +193,15 @@ function updateCrops() {
   const region = cropRegion(source.naturalWidth, source.naturalHeight, byId('batch-size').value,
     byId('batch-x').value, byId('batch-y').value);
   byId('batch-crop-position').textContent = `左上角 (${region.left}, ${region.top}) · ${region.size} × ${region.size} 像素`;
+  const target = cropImages.find(item => item.isReference)?.image;
+  const mode = byId('batch-mode');
+  mode.options[1].disabled = !target?.naturalWidth;
+  if (!target?.naturalWidth) mode.value = 'detail';
+  byId('batch-legend').textContent = plateModes[mode.value];
+  byId('batch-legend').classList.toggle('error-scale', mode.value === 'error');
   cropImages.forEach(({image, canvas}) => {
     if (image.naturalWidth === source.naturalWidth && image.naturalHeight === source.naturalHeight) {
-      drawCrop(canvas, image, region);
+      drawCrop(canvas, image, region, mode.value === 'error' ? target : null);
     }
   });
 }
@@ -222,8 +235,11 @@ async function loadDetail(sampleId, focus = false) {
     const crop = element('figure'), canvas = element('canvas');
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', `${name}的局部放大`);
-    crop.append(element('figcaption', name), canvas); crops.append(crop);
-    cropImages.push({image, canvas});
+    crop.dataset.label = name;
+    crop.dataset.scores = result ? 'PSNR ' + fmt(result.psnr) + ' dB · SSIM ' + fmt(result.ssim, 4) : '参考图（GT）';
+    canvas.hidden = true;
+    crop.append(element('figcaption', name), canvas, element('small', crop.dataset.scores)); crops.append(crop);
+    cropImages.push({image, canvas, isReference: url === detail.reference_url});
     image.onload = updateCrops;
     image.onerror = () => figure.append(element('p', '图片文件无法读取。', 'error'));
     image.src = url;
@@ -259,7 +275,9 @@ byId('batch-filter').onchange = byId('batch-search').oninput = () => {
 };
 byId('batch-close-detail').onclick = () => { closeDetail(); byId('batch-search').focus(); };
 byId('batch-crop').ontoggle = updateCrops;
-['batch-x', 'batch-y', 'batch-size'].forEach(id => { byId(id).oninput = updateCrops; });
+byId('batch-png').onclick = () => exportPlate(byId('batch-crops'), byId('batch-detail-title').textContent,
+  byId('batch-crop-position').textContent, byId('batch-legend').textContent);
+['batch-x', 'batch-y', 'batch-size', 'batch-mode'].forEach(id => { byId(id).oninput = updateCrops; });
 
 async function initialize() {
   const [datasets, models, recent] = await Promise.all([json('/api/benchmark/datasets'), json('/api/models'), json(base)]);

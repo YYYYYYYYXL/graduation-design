@@ -78,13 +78,6 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 #single-score-charts { margin-bottom: 24px; }
 #single-score-title { margin: 0 0 10px; color: #193e47; font-size: 19px; }
-.single-score-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 12px; }
-.single-score-card { min-width: 0; padding: clamp(10px, 2vw, 16px); border: 1px solid #d8e6e8; border-radius: 12px; background: #f7fbfb; }
-.single-score-card h4 { margin: 0; color: #193e47; font-size: 16px; }
-.single-score-card p { margin: 4px 0 0; }
-.single-score-plot { margin-top: 10px; min-height: 174px; border: 1px solid #dee9eb; border-radius: 8px; background: white; }
-.single-score-details { margin: 10px 0 0; padding-left: 18px; color: #526a74; font-size: 13px; }
-
 .nav-link { display: inline-flex; align-items: center; padding: 8px 16px; border-radius: 6px; font-size: 14px; text-decoration: none; color: #344750; }
 .nav-link:hover { background: #eff4f5; }
 .benchmark { max-width: 1240px; }
@@ -122,19 +115,42 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .batch-chart-controls label { display: flex; align-items: center; gap: 8px; color: #36525b; font-size: 13px; }
 .batch-chart-controls select { min-width: 78px; padding: 6px 9px; border-color: #cddfe2; }
 #batch-chart-context { margin: 0 0 12px; color: #526a74; }
-.batch-chart-highlights { display: grid; grid-template-columns: 1.28fr repeat(2, 1fr); gap: 9px; margin-bottom: 10px; }
-.batch-chart-stat { min-width: 0; padding: 10px 13px; border: 1px solid #dee9eb; border-radius: 8px; background: white; }
-.batch-chart-stat span { display: block; color: #526a74; font-size: 12px; overflow-wrap: anywhere; }
-.batch-chart-stat strong { color: #213d46; font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.batch-chart-stat-leading { border-color: #b5d9d8; background: #e9f6f5; }
-.batch-chart-stat-leading strong { color: #145b64; }
-.batch-chart-content { height: 332px; border: 1px solid #dee9eb; border-radius: 9px; background: white; }
-.batch-chart-message { margin: 0; padding: 22px 14px; border: 1px dashed #cbdcde; border-radius: 8px; color: #526a74; background: white; font-size: 14px; }
-
-@media(max-width: 590px) {
-  .batch-chart-highlights { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .batch-chart-stat-leading { grid-column: 1 / -1; }
-  .batch-chart-stat strong { font-size: 19px; }
-  .batch-chart-content { height: 305px; }
-}
 @media(max-width: 600px) { .nav-link { padding: 8px 12px; } }
+
+/* Matched image plates and quantitative exhibits share the same column rhythm. */
+#result-panel, #batch-report, #batch-detail { border-top: 3px solid #24424c; }
+#result-panel h2, .benchmark h1, #batch-report h3, #single-score-title {
+  font-family: Georgia, "Songti SC", SimSun, serif; color: #203943; letter-spacing: .025em;
+}
+#detail-panel, #batch-crop, .batch-charts {
+  padding: 18px 0; margin: 20px 0; background: white; border: 0;
+  border-top: 1px solid #657981; border-radius: 0;
+}
+.plate-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+#detail-grid, #batch-crops {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  align-items: start; gap: 18px 12px;
+}
+#detail-grid figure, #batch-crops figure { border: 0; border-top: 2px solid #374f59; border-radius: 0; padding: 8px 0; }
+#detail-grid canvas, #batch-crops canvas { width: 100%; height: auto; max-width: none; max-height: none; border-radius: 0; display: block; }
+#detail-grid small, #batch-crops small { font-variant-numeric: tabular-nums; color: #364952; }
+#detail-grid figcaption, #batch-crops figcaption { font-weight: 600; min-height: 2.2em; }
+#detail-grid .remove-image { font-size: 11px; padding: 2px 6px; }
+#batch-chart-content { height: 350px; }
+#batch-chart-stats { margin-top: 12px; }
+#batch-summary table, #single-score-panels table, #batch-chart-stats table { border-block: 2px solid #3e5158; }
+#batch-summary th, #single-score-panels th, #batch-chart-stats th { background: white; }
+#batch-summary thead th, #single-score-panels thead th { border-bottom: 1px solid #657981; }
+.table-scroll { max-width: 100%; }
+@media (max-width: 600px) {
+  #detail-grid, #batch-crops { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .checks { grid-template-columns: 1fr; }
+}
+
+.error-scale::after {
+  content: '0　　 8　　 16　　 24　　 ≥32';
+  display: block; width: max-content; padding-top: 9px; margin-top: 8px;
+  color: #34464d; font: 12px/1.6 monospace;
+  background: linear-gradient(to right, black, white) top left / 100% 8px no-repeat;
+  border-right: 1px solid #aab3b5;
+}

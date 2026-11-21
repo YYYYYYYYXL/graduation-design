@@ -1,263 +1,150 @@
-const chartMetrics = {
-  psnr: {label: 'PSNR', digits: 2, unit: ' dB', delta: 'delta_psnr', padding: 0.4},
-  ssim: {label: 'SSIM', digits: 4, unit: '', delta: 'delta_ssim', padding: 0.004},
-};
-const noiseLevels = [
-  {id: 'div2k_15', sigma: 15},
-  {id: 'div2k_25', sigma: 25},
-  {id: 'div2k_50', sigma: 50},
-];
-const preferredTrendModels = ['restormer_div2k_batch16', 'p2n_div2k'];
-const chartColors = {
-  restormer_div2k_batch16: '#146771',
-  p2n_div2k: '#436897',
-  dncnn_div2k: '#7a5598',
-  dncnn_sidd: '#a86725',
-  restormer_sidd_batch16: '#a64953',
-  bm3d: '#6d7844',
-  input: '#687782',
-};
-const chartHost = document.getElementById('batch-chart-content');
-let benchmarkChart, chartReport, trendSelection;
-let chartView = 'ranking';
-let chartGroupsKey = '';
-
-function updateBenchmarkCharts(data) {
-  if (chartReport?.id !== data.id) trendSelection = undefined;
-  chartReport = data;
-  const picker = byId('batch-chart-group');
-  const key = data.datasets.join(',');
-  if (key !== chartGroupsKey) {
-    const previous = picker.value;
-    picker.replaceChildren(...data.datasets.map(id => new Option(groupName(id), id)));
-    picker.value = data.datasets.includes(previous) ? previous : data.datasets[0];
-    chartGroupsKey = key;
+// Read the existing per-image CSV once for the selected, finished run.
+function parseBenchmarkCsv(text) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  text = text.replace(/^\uFEFF/, '');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      if (quoted && text[i + 1] === '"') { field += '"'; i++; }
+      else quoted = !quoted;
+    } else if (!quoted && c === ',') { row.push(field); field = ''; }
+    else if (!quoted && (c === '\n' || c === '\r')) {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); rows.push(row); row = []; field = '';
+    } else field += c;
   }
-  const canShowTrend = noiseLevels.filter(level => data.datasets.includes(level.id)).length > 1;
-  if (!canShowTrend) chartView = 'ranking';
-  document.querySelectorAll('[data-chart-view]').forEach(button => {
-    const target = button.dataset.chartView;
-    button.disabled = target === 'trend' && !canShowTrend;
-    button.setAttribute('aria-pressed', String(chartView === target));
-  });
-  byId('batch-chart-group-field').hidden = chartView === 'trend';
-  drawBenchmarkChart();
+  if (field || row.length) { row.push(field); rows.push(row); }
+  const header = rows.shift() || [];
+  return rows.map(values => Object.fromEntries(header.map((key, i) => [key, values[i]])));
 }
 
-function drawBenchmarkChart() {
-  if (!chartReport) return;
-  const highlights = byId('batch-chart-highlights');
-  const message = byId('batch-chart-message');
-  highlights.replaceChildren();
-  highlights.hidden = message.hidden = chartHost.hidden = true;
-  const metricId = byId('batch-chart-metric').value;
-  const metric = chartMetrics[metricId];
-  if (!window.echarts) {
-    showChartMessage('图表库未能加载。可以查看下方的汇总表。');
+function pairedDifferences(records, dataset, models, method, comparator, metric) {
+  const samples = new Map();
+  for (const row of records) {
+    if (row.dataset !== dataset || row.error) continue;
+    if (!samples.has(row.filename)) samples.set(row.filename, new Map());
+    samples.get(row.filename).set(row.model, row);
+  }
+  const values = [];
+  for (const sample of samples.values()) {
+    if (!models.every(model => sample.has(model.id))) continue;
+    const row = sample.get(method);
+    const a = row[metric];
+    const b = comparator === 'input' ? row['input_' + metric] : sample.get(comparator)[metric];
+    if (a?.trim() && b?.trim() && Number.isFinite(+a) && Number.isFinite(+b)) values.push(+a - +b);
+  }
+  return values.sort((a, b) => a - b);
+}
+
+function quantile(sorted, p) {
+  const pos = (sorted.length - 1) * p;
+  const lo = Math.floor(pos);
+  return sorted[lo] + (pos - lo) * (sorted[Math.ceil(pos)] - sorted[lo]);
+}
+
+let chartRun, imageRecords, distributionChart;
+const field = key => document.getElementById('batch-chart-' + key);
+
+function comparisonOptions(select, options, preferred) {
+  select.replaceChildren(...options.map(({id, name}) => new Option(name, id)));
+  select.value = options.some(item => item.id === preferred) ? preferred : options[0].id;
+}
+
+async function updateBenchmarkCharts(data) {
+  if (chartRun !== data.id) {
+    chartRun = data.id;
+    imageRecords = null;
+    comparisonOptions(field('group'), data.datasets.map(id => ({id, name: groupName(id)})));
+    comparisonOptions(field('method'), data.models);
+    updateComparators();
+  }
+  if (data.state === 'running') {
+    distributionMessage('评测结束后显示逐图配对分布。当前共同样本均值见上表。');
     return;
   }
-  const view = chartView === 'ranking'
-    ? rankingChart(metricId, metric, highlights)
-    : trendChart(metricId, metric);
-  if (!view) return;
-
-  chartHost.hidden = false;
-  if (!benchmarkChart) {
-    benchmarkChart = window.echarts.init(chartHost, null, {renderer: 'svg'});
-    benchmarkChart.on('legendselectchanged', event => { trendSelection = event.selected; });
-  } else if (benchmarkChart.getWidth() !== chartHost.clientWidth) {
-    benchmarkChart.resize();
+  if (imageRecords) { drawDistribution(); return; }
+  distributionMessage('正在读取逐图测量值…');
+  try {
+    const response = await fetch(base + '/' + encodeURIComponent(data.id) + '/images.csv');
+    if (!response.ok) throw new Error();
+    const records = parseBenchmarkCsv(await response.text());
+    if (activeId !== data.id || report !== data) return;
+    imageRecords = records;
+    drawDistribution();
+  } catch {
+    if (activeId === data.id) distributionMessage('逐图数据读取失败，请重新选择本次评测或刷新页面。');
   }
-  const narrow = chartHost.clientWidth < 520;
-  benchmarkChart.setOption(view(narrow), {notMerge: true});
 }
 
-function showChartMessage(text) {
-  const message = byId('batch-chart-message');
-  message.textContent = text;
-  message.hidden = false;
+function updateComparators() {
+  const options = [{id: 'input', name: '带噪输入'}, ...report.models.filter(m => m.id !== field('method').value)];
+  comparisonOptions(field('base'), options, field('base').value);
 }
 
-function scoreText(value, metric) {
-  if (!Number.isFinite(value)) return value === '∞' ? '∞' : '—';
-  return `${fmt(value, metric.digits)}${metric.unit}`;
+function distributionMessage(message) {
+  if (distributionChart) { distributionChart.dispose(); distributionChart = null; }
+  field('content').hidden = true;
+  field('context').textContent = message;
+  field('stats').replaceChildren();
+  field('export').disabled = true;
 }
 
-function chartHeading(metric) {
-  return `平均 ${metric.label}${metric.unit ? '（dB）' : ''}`;
-}
-
-function chartHighlight(label, value, leading = false) {
-  const card = element('div', undefined, leading ? 'batch-chart-stat batch-chart-stat-leading' : 'batch-chart-stat');
-  card.append(element('span', label), element('strong', value));
-  return card;
-}
-
-function chartOptions(description) {
-  return {
-    animation: false,
-    aria: {enabled: true, label: {description}},
-    textStyle: {fontFamily: 'Microsoft YaHei, system-ui, sans-serif', color: '#283d45'},
-    tooltip: {confine: true, renderMode: 'richText', backgroundColor: '#20383e',
-      borderWidth: 0, textStyle: {color: '#fff', fontSize: 12}},
-  };
-}
-
-function rankingChart(metricId, metric, highlights) {
-  const dataset = byId('batch-chart-group').value;
-  const rows = chartReport.rows.filter(row => row.dataset === dataset);
-  const baseline = rows.find(row => row.model === 'input');
-  if (!baseline) return null;
-  const preview = chartReport.preview ? '预览 · ' : '';
-  byId('batch-chart-context').textContent = `${preview}${groupName(dataset)} · 共同计分 ${baseline.compared}/${baseline.total} 张`;
-  if (!baseline.compared) {
-    showChartMessage('等待所选方法完成同一批样本，随后显示排名。');
-    return null;
+function drawDistribution() {
+  if (!imageRecords || !report) return;
+  const dataset = field('group').value, metric = field('metric').value;
+  const method = field('method').value, comparator = field('base').value;
+  const values = pairedDifferences(imageRecords, dataset, report.models, method, comparator, metric);
+  const baseline = report.rows.find(row => row.dataset === dataset && row.model === 'input');
+  const n = values.length, unit = metric === 'psnr' ? ' dB' : '', digits = metric === 'psnr' ? 2 : 4;
+  const pair = field('method').selectedOptions[0].text + ' − ' + field('base').selectedOptions[0].text;
+  const context = groupName(dataset) + ' · ' + pair + ' · 有效 ' + n + '/' + baseline.total
+    + ' 张（未共同成功 ' + (baseline.total - baseline.compared) + '，差值非有限或缺失 ' + (baseline.compared - n) + '）';
+  distributionMessage(context + (n ? '' : ' · 尚无可比较的有限差值。'));
+  if (!n) return;
+  const higher = values.filter(v => v > 0).length, tied = values.filter(v => v === 0).length;
+  const {table, body} = buildTable(['Δ 中位数', '第 25 / 75 百分位', '改善 / 持平 / 下降（张）']);
+  const row = body.insertRow();
+  [signed(quantile(values, .5), digits) + unit,
+    [quantile(values, .25), quantile(values, .75)].map(v => signed(v, digits)).join(' / ') + unit,
+    [higher, tied, n - higher - tied].join(' / ')].forEach(v => row.insertCell().textContent = v);
+  field('stats').append(table);
+  if (n < 2 || !window.echarts) {
+    field('context').textContent += n < 2 ? ' · 单例仅报告观测值。' : ' · 图形组件不可用。';
+    return;
   }
-
-  const score = row => row[metricId] === '∞' ? Infinity : row[metricId];
-  const ranked = rows.filter(row => row.model !== 'input' &&
-    (Number.isFinite(score(row)) || score(row) === Infinity));
-  ranked.sort((a, b) => score(a) === score(b) ? 0 : score(a) > score(b) ? -1 : 1);
-  if (!ranked.length) {
-    showChartMessage('当前没有可用的模型分数。');
-    return null;
+  const points = [];
+  const margin = Math.max((values[n-1] - values[0]) * .05, 10 ** -digits);
+  const low = Math.min(0, values[0]) - margin, high = Math.max(0, values[n-1]) + margin;
+  points.push([low, 0]);
+  for (let i = 0; i < n; i++) {
+    if (i + 1 === n || values[i] !== values[i + 1]) points.push([values[i], (i + 1) * 100 / n]);
   }
-  const [first, second] = ranked;
-  const leadingScore = scoreText(first[metricId], metric);
-  highlights.append(chartHighlight(`第 1 名 · ${first.name}`, leadingScore, true));
-  if (second && Number.isFinite(score(first)) && Number.isFinite(score(second))) {
-    const gap = score(first) - score(second);
-    highlights.append(chartHighlight(gap ? `领先 ${second.name}` : `与 ${second.name} 并列`, scoreText(gap, metric)));
-  }
-  highlights.append(chartHighlight('去噪前', scoreText(baseline[metricId], metric)));
-  highlights.hidden = false;
-
-  const finite = ranked.filter(row => Number.isFinite(score(row)));
-  if (!finite.length) {
-    showChartMessage('当前模型分数均为 ∞，完整读数见汇总表。');
-    return null;
-  }
-  const names = new Map(ranked.map(row => [row.model,
-    row[metricId] === '∞' ? `${row.name}  ∞` : row.name]));
-  const low = score(finite.at(-1)), high = score(finite[0]);
-  const padding = Math.max(metric.padding, (high - low) * 0.085);
-
-  return narrow => ({
-    ...chartOptions(`${groupName(dataset)}的${chartHeading(metric)}排名。${first.name}排名第一，得分 ${leadingScore}。完整分数见下方汇总表。`),
-    grid: {left: narrow ? 112 : 170, right: narrow ? 53 : 82, top: 11, bottom: 57},
-    xAxis: {
-      type: 'value', min: low - padding, max: high + padding, splitNumber: narrow ? 3 : 5,
-      name: chartHeading(metric), nameLocation: 'middle', nameGap: 34,
-      axisLabel: {color: '#526971', formatter: value => Number(value.toFixed(metricId === 'psnr' ? 1 : 3))},
-      splitLine: {lineStyle: {color: '#e4edee', type: 'dashed'}},
-    },
-    yAxis: {
-      type: 'category', inverse: true, data: ranked.map(row => row.model),
-      axisLine: {show: false}, axisTick: {show: false},
-      axisLabel: {formatter: id => names.get(id), width: narrow ? 100 : 150, overflow: 'truncate',
-        color: '#304a53', fontSize: narrow ? 10 : 13},
-      splitArea: {show: true, areaStyle: {color: ['#f5f9f9', '#ffffff']}},
-    },
-    tooltip: {
-      ...chartOptions('').tooltip,
-      trigger: 'item',
-      formatter: ({data}) => {
-        const row = data.row;
-        const detail = [row.name, `${chartHeading(metric)} ${scoreText(row[metricId], metric)}`];
-        if (Number.isFinite(row[metric.delta])) detail.push(`较去噪前 ${signed(row[metric.delta], metric.digits)}${metric.unit}`);
-        if (Number.isFinite(row.seconds)) detail.push(`${fmt(row.seconds, 3)} 秒/张 · ${row.device.toUpperCase()}`);
-        return detail.join('\n');
-      },
-    },
-    series: [{
-      type: 'scatter',
-      symbolSize: 12,
-      label: {show: true, position: 'right', distance: 7, color: '#233f46', fontWeight: 600,
-        fontSize: narrow ? 10 : 12, formatter: ({data}) => scoreText(data.value[0], metric)},
-      emphasis: {scale: 1.25},
-      data: finite.map(row => ({
-        value: [score(row), row.model], row,
-        symbolSize: row === first ? 16 : 12,
-        itemStyle: {color: row === first ? '#146771' : row === second ? '#436897' : '#839ba1', opacity: 1},
-      })),
-    }],
+  points.push([high, 100]);
+  const host = field('content');
+  host.hidden = false;
+  distributionChart = window.echarts.init(host, null, {renderer: 'svg'});
+  distributionChart.setOption({
+    animation: false, backgroundColor: '#fff',
+    title: {text: groupName(dataset) + ' · Δ' + metric.toUpperCase(), subtext: pair + '   n = ' + n,
+      textStyle: {fontSize: 15}, left: 12},
+    grid: {left: 56, right: 26, top: 90, bottom: 55},
+    xAxis: {type: 'value', min: low, max: high, name: '逐图 Δ' + metric.toUpperCase() + unit,
+      nameLocation: 'middle', nameGap: 32, axisLabel: {hideOverlap: true, formatter: v => Number(v.toFixed(digits))}},
+    yAxis: {type: 'value', min: 0, max: 100, name: '累计样本比例 (%)'},
+    series: [{type: 'line', step: 'end', showSymbol: false, data: points, lineStyle: {color: '#16576c', width: 2.5},
+      markLine: {silent: true, symbol: 'none', label: {show: false}, data: [{xAxis: 0}]}}]
   });
+  field('export').disabled = false;
 }
 
-function trendChart(metricId, metric) {
-  const levels = noiseLevels.filter(level => chartReport.datasets.includes(level.id));
-  const rows = new Map(chartReport.rows.map(row => [`${row.dataset}/${row.model}`, row]));
-  const valueAt = (level, model) => rows.get(`${level.id}/${model}`)?.[metricId];
-  const samples = levels.map(level => {
-    const baseline = rows.get(`${level.id}/input`);
-    return `σ=${level.sigma} ${baseline.compared}/${baseline.total} 张`;
-  });
-  byId('batch-chart-context').textContent = `${chartReport.preview ? '预览 · ' : ''}共同计分 · ${samples.join(' · ')}`;
-  const models = [...chartReport.models, {id: 'input', name: '去噪前'}];
-  const plottedLevels = levels.filter(level => models.some(model => Number.isFinite(valueAt(level, model.id))));
-  if (plottedLevels.length < 2) {
-    showChartMessage('至少两个噪声档位有可用分数时显示趋势。');
-    return null;
-  }
-  const plotted = models.filter(model => levels.some(level => Number.isFinite(valueAt(level, model.id))));
-  const preferred = plotted.filter(model => preferredTrendModels.includes(model.id));
-  const otherModels = plotted.filter(model => !preferredTrendModels.includes(model.id));
-  if (!trendSelection) {
-    const defaults = preferred.length ? preferred : plotted.filter(model => model.id !== 'input').slice(0, 2);
-    trendSelection = Object.fromEntries(plotted.map(model => [model.name, defaults.includes(model)]));
-  }
-  const hasInfinite = models.some(model => levels.some(level => valueAt(level, model.id) === '∞'));
-  if (hasInfinite) byId('batch-chart-context').textContent += ' · ∞ 分数见汇总表';
-  const baseOptions = chartOptions(`DIV2K 各噪声档位的${chartHeading(metric)}。点击图例切换模型，完整分数见下方汇总表。`);
-  return narrow => ({
-    ...baseOptions,
-    color: plotted.map(model => chartColors[model.id] || '#677e8e'),
-    grid: {left: narrow ? 45 : 60, right: narrow ? 22 : 36, top: 35, bottom: 91},
-    legend: {type: 'scroll', bottom: 15, left: 12, right: 12, itemWidth: 19, itemHeight: 9,
-      data: [...preferred, ...otherModels].map(model => model.name),
-      selected: trendSelection, textStyle: {fontSize: 12, color: '#38545c'}},
-    xAxis: {
-      type: 'value', min: levels[0].sigma, max: levels.at(-1).sigma, interval: 5,
-      name: '噪声强度 σ', nameLocation: 'middle', nameGap: 31, nameTextStyle: {color: '#526971'},
-      axisLabel: {color: '#526971', formatter: value => levels.some(level => level.sigma === value) ? String(value) : ''},
-      axisTick: {show: false}, splitLine: {show: false},
-    },
-    yAxis: {
-      type: 'value', scale: true, name: chartHeading(metric), splitNumber: 4, nameTextStyle: {color: '#526971'},
-      axisLabel: {color: '#526971'}, splitLine: {lineStyle: {color: '#e4edee', type: 'dashed'}},
-    },
-    tooltip: {
-      ...baseOptions.tooltip, trigger: 'axis', axisPointer: {type: 'line', lineStyle: {color: '#8da6aa'}},
-      formatter: points => {
-        if (!points.length) return '';
-        const lines = points.filter(point => Number.isFinite(point.value[1]))
-          .map(point => `${point.seriesName}  ${scoreText(point.value[1], metric)}`);
-        return [`σ=${points[0].axisValue}`, ...lines].join('\n');
-      },
-    },
-    series: plotted.map(model => ({
-      id: model.id, name: model.name, type: 'line', showSymbol: true, connectNulls: false,
-      symbol: model.id === 'p2n_div2k' ? 'diamond' : 'circle', symbolSize: 8,
-      lineStyle: {width: 2.5, type: model.id === 'input' ? 'dashed' : 'solid'},
-      emphasis: {focus: 'series'},
-      data: levels.map(level => {
-        const score = valueAt(level, model.id);
-        return [level.sigma, Number.isFinite(score) ? score : null];
-      }),
-    })),
-  });
-}
-
-document.querySelectorAll('[data-chart-view]').forEach(button => {
-  button.onclick = () => {
-    chartView = button.dataset.chartView;
-    updateBenchmarkCharts(chartReport);
-  };
-});
-document.getElementById('batch-chart-group').onchange = drawBenchmarkChart;
-document.getElementById('batch-chart-metric').onchange = drawBenchmarkChart;
-new ResizeObserver(() => {
-  if (benchmarkChart && !chartHost.hidden && chartHost.clientWidth &&
-      chartHost.clientWidth !== benchmarkChart.getWidth()) drawBenchmarkChart();
-}).observe(chartHost);
+field('method').onchange = () => { updateComparators(); drawDistribution(); };
+for (const key of ['base', 'metric', 'group']) field(key).onchange = drawDistribution;
+field('export').onclick = () => {
+  if (!distributionChart) return;
+  const link = document.createElement('a');
+  link.href = distributionChart.getDataURL({type: 'svg'});
+  link.download = [activeId, field('group').value, field('method').value, field('base').value, field('metric').value].join('_') + '.svg';
+  link.click();
+};
+new ResizeObserver(() => distributionChart?.resize()).observe(field('content'));

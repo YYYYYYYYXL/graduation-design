@@ -18,7 +18,7 @@ function clearResults() {
   $('result-panel').hidden = true; $('export').disabled = true;
   $('status').textContent = '';
   detailImages = []; $('detail-grid').replaceChildren(); $('detail-panel').hidden = true;
-  $('detail-panel').open = false;
+  $('detail-panel').open = true; $('detail-mode').value = 'detail';
 }
 function selectTab(next) {
   if (tab !== next) clearResults();
@@ -32,6 +32,7 @@ function selectTab(next) {
   $('form-title').textContent = experiment ? '实验对比' : '图片去噪';
   $('result-title').textContent = experiment ? '对比结果' : '去噪结果';
   $('export').hidden = !experiment;
+  $('full-views').open = !experiment;
   $('results').className = experiment ? 'result-grid' : '';
   updateMode();
 }
@@ -74,6 +75,7 @@ function removeImageViews(url) {
     if (figure.dataset.imageUrl === url) figure.remove();
   });
   detailImages = detailImages.filter(item => item.url !== url);
+  drawDetails();
   $('detail-panel').hidden = !detailImages.length;
   $('shared-input').hidden = !$('shared-input').children.length;
 }
@@ -102,39 +104,14 @@ function imageFigure(label, url, onRemove = () => removeImageViews(url)) {
 }
 function showSummary() {
   const first = results[0], hasReference = first.reference_provided;
-  const devices = new Set(results.map(result => result.device.toUpperCase()));
-  const mixedDevices = devices.size > 1;
-  const deviceNote = mixedDevices ? '' : ` · 计时设备 ${devices.values().next().value}`;
   const summary = $('comparison-summary'); summary.replaceChildren(); summary.hidden = false;
   summary.append(node('p', hasReference ? 'PSNR、SSIM 越高通常越接近参考图。先看去噪前的基线，再比较各方法。' : 'BRISQUE 越低通常表示感知质量越好。请结合放大图检查细节。', 'metric-guide'));
-  summary.append(node('p', `本次处理 ${first.width} × ${first.height} 像素 · ${first.synthetic ? `合成高斯噪声 σ=${first.requested_sigma} · 随机种子 ${first.seed}` : '上传的带噪照片，未额外加噪'}${first.resized ? ` · 原图 ${first.original_width} × ${first.original_height} 已缩小，指标针对缩小后的图片` : ''}${deviceNote}`, 'muted'));
-  const wrapper = node('div', undefined, 'table-scroll'), table = node('table');
-  const caption = node('caption', '本次对比汇总'); table.append(caption);
-  const head = node('thead'), heading = node('tr');
-  const labels = ['模型 / 方法', ...(hasReference ? ['PSNR ↑ (dB)', 'SSIM ↑'] : ['BRISQUE ↓']), '去噪耗时 (s)'];
-  labels.forEach(label => { const th = node('th', label); th.scope = 'col'; heading.append(th); });
-  head.append(heading); table.append(head);
-  const body = node('tbody');
-  const scores = value => hasReference ? [format(value.psnr), format(value.ssim, 4)] : [format(value.brisque, 2)];
-  const baseline = node('tr', undefined, 'baseline');
-  ['去噪前 · 原始输入', ...scores(first.input_metrics), '—'].forEach(v => baseline.append(node('td', v)));
-  body.append(baseline);
-  results.forEach(r => {
-    const row = node('tr');
-    const elapsed = node('td', format(r.seconds));
-    if (mixedDevices) elapsed.append(node('span', ` · ${r.device.toUpperCase()}`, 'muted'));
-    [r.model_name, ...scores(r.metrics)].forEach(v => row.append(node('td', v)));
-    row.append(elapsed);
-    body.append(row);
-  });
-  table.append(body); wrapper.append(table); summary.append(wrapper);
+  summary.append(node('p', `本次处理 ${first.width} × ${first.height} 像素 · ${first.synthetic ? `合成高斯噪声 σ=${first.requested_sigma} · 随机种子 ${first.seed}` : '上传的带噪照片，未额外加噪'}${first.resized ? ` · 原图 ${first.original_width} × ${first.original_height} 已缩小，指标针对缩小后的图片` : ''}`, 'muted'));
   const help = node('details'); help.append(node('summary', '怎么看这些指标和用时？'));
   help.append(node('p', 'BM3D 的去噪耗时包含噪声估计，神经网络的去噪耗时包含分块和设备传输。解读速度时请结合计时设备。' + (results.some(r => r.tiled) ? '部分结果使用分块推理。' : ''), 'muted'));
   help.append(node('p', '导出 CSV 可查看噪声估计、加载时间、总处理时间和参数量等明细。', 'muted'));
   help.append(node('p', '这张图的结果不代表所有照片。可以比较同一网络的 DIV2K 与 SIDD 两个版本，但差异也受训练设置影响；也可以比较五个模型与 BM3D。P2N 为现有网络直接推理。', 'muted'));
   summary.append(help);
-  const notes = [...first.input_metrics.quality_notes.map(note => `去噪前：${note}`), ...results.flatMap(r => r.metrics.quality_notes.map(note => `${r.model_name}：${note}`))];
-  notes.forEach(note => summary.append(node('p', note, 'muted')));
 }
 function format(value, digits = 3) { return value === null || value === undefined ? '未测量' : typeof value === 'number' ? value.toFixed(digits) : value; }
 function addResult(result) {
@@ -148,13 +125,13 @@ function addResult(result) {
     if (results.length === 1) {
       $('shared-input').hidden = false;
       $('shared-input').append(imageFigure('共同输入 · 带噪照片', result.input_url));
-      addDetailImage('去噪前', result.input_url);
+      addDetailImage('带噪输入', result.input_url, result.input_metrics);
       if (result.reference_url) {
         $('shared-input').append(imageFigure('干净参考图', result.reference_url));
-        addDetailImage('干净参考图', result.reference_url);
+        addDetailImage('干净参考图', result.reference_url, null, true);
       }
     }
-    addDetailImage(result.model_name, result.output_url, () => removeResult(result));
+    addDetailImage(result.model_name, result.output_url, result.metrics, false, () => removeResult(result));
     showSummary();
   }
   const images = node('div', undefined, 'images');
@@ -169,17 +146,22 @@ function addResult(result) {
   }
   article.append(links); $('results').append(article);
 }
-function addDetailImage(label, url, onRemove = () => removeImageViews(url)) {
+function addDetailImage(label, url, metrics, isReference = false, onRemove = () => removeImageViews(url)) {
   const figure = node('figure'), canvas = node('canvas'), img = new Image();
   figure.dataset.imageUrl = url;
   canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', `${label}的局部放大`);
   const caption = node('figcaption', undefined, 'image-caption');
   caption.append(node('span', label), removeButton(label, onRemove));
-  figure.append(caption, canvas); $('detail-grid').append(figure);
-  const item = {img, canvas, url, ready: false}; detailImages.push(item);
+  const scores = !metrics ? '参考图（GT）' : results[0].reference_provided
+    ? 'PSNR ' + format(metrics.psnr, 2) + ' dB · SSIM ' + format(metrics.ssim, 4)
+    : 'BRISQUE ' + format(metrics.brisque, 2);
+  figure.dataset.label = label; figure.dataset.scores = scores;
+  canvas.hidden = true;
+  figure.append(caption, canvas, node('small', scores)); $('detail-grid').append(figure);
+  const item = {img, canvas, url, isReference, ready: false}; detailImages.push(item);
   img.onload = () => { item.ready = true; if ($('detail-panel').open) drawDetails(); };
   img.onerror = () => figure.append(node('p', '图片加载失败，可点击上方图片重新查看。', 'error'));
-  img.src = url; $('detail-panel').hidden = false;
+  img.src = url; $('detail-panel').hidden = false; drawDetails();
 }
 function drawDetails() {
   if (!results.length) return;
@@ -187,11 +169,21 @@ function drawDetails() {
   const crop = cropRegion(width, height, $('detail-size').value, $('detail-x').value, $('detail-y').value);
   const {left, top, size} = crop;
   $('detail-location').textContent = `区域左上角 (${left}, ${top})，取 ${size} × ${size} 个原始像素，同倍数放大。`;
+  const target = detailImages.find(item => item.isReference);
+  const mode = $('detail-mode');
+  mode.options[1].disabled = !target?.ready;
+  if (!target?.ready) mode.value = 'detail';
+  $('detail-legend').textContent = plateModes[mode.value];
+  $('detail-legend').classList.toggle('error-scale', mode.value === 'error');
+  $('detail-png').disabled = !detailImages.some(item => item.ready);
   detailImages.forEach(({img, canvas, ready}) => {
-    if (ready) drawCrop(canvas, img, crop);
+    if (ready) drawCrop(canvas, img, crop, mode.value === 'error' ? target.img : null);
   });
 }
-['detail-x', 'detail-y', 'detail-size'].forEach(id => $(id).oninput = drawDetails);
+$('detail-png').onclick = () => exportPlate($('detail-grid'),
+  $('image').files[0].name + (results[0].synthetic ? ' · σ=' + results[0].requested_sigma + ' · seed=' + results[0].seed : ''),
+  $('detail-location').textContent, $('detail-legend').textContent);
+['detail-x', 'detail-y', 'detail-size', 'detail-mode'].forEach(id => $(id).oninput = drawDetails);
 $('detail-panel').ontoggle = () => { if ($('detail-panel').open) drawDetails(); };
 $('denoise-form').onsubmit = async event => {
   event.preventDefault();
@@ -221,7 +213,7 @@ $('denoise-form').onsubmit = async event => {
         if (results.length && (result.input_sha256 !== results[0].input_sha256 || result.reference_sha256 !== results[0].reference_sha256 || result.width !== results[0].width || result.height !== results[0].height)) throw new Error('输入或参考图与本组不一致，不能合并比较，请重新开始。');
         results.push(result); addResult(result);
       }
-      catch (error) { errors.push(`${label}：${error.message}`); $('results').append(node('p', errors.at(-1), 'error')); }
+      catch (error) { $('full-views').open = true; errors.push(`${label}：${error.message}`); $('results').append(node('p', errors.at(-1), 'error')); }
     }
     $('status').textContent = errors.length ? `成功 ${results.length} 项，失败 ${errors.length} 项，原因见下方。` : experiment ? `已完成 ${results.length} 项对比。` : '去噪完成。';
     $('status').className = errors.length ? 'error' : '';
