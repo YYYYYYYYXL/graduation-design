@@ -125,3 +125,6 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .checks { grid-template-columns: 1fr; } }
 
 .paper-strip .best-score figcaption span { font-weight: bold; }
+
+.model-plot { width: 100%; height: 370px; margin: 10px 0 24px; }
+#batch-models table th { background: #f2f6f7; }

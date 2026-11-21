@@ -12,7 +12,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 
 import numpy as np
-from flask import Blueprint, Response, abort, current_app, jsonify, request, send_file
+from flask import Blueprint, Response, abort, jsonify, redirect, request, send_file, url_for
 from PIL import Image
 
 from denoising_metrics import reference_scores
@@ -39,7 +39,7 @@ CREATE TABLE sample (
 );
 CREATE TABLE prediction (
     sample_id INTEGER NOT NULL, model TEXT NOT NULL,
-    psnr REAL, ssim REAL, seconds REAL, device TEXT, sigma REAL, error TEXT,
+    psnr REAL, ssim REAL, seconds REAL, device TEXT, sigma REAL, error TEXT, parameters INTEGER,
     PRIMARY KEY (sample_id, model)
 );
 """
@@ -117,7 +117,7 @@ def run_batch(directory, models):
                 for sample in samples:
                     result = evaluate_image(directory, sample, model)
                     with db:
-                        db.execute("INSERT INTO prediction VALUES (?,?,?,?,?,?,?,?)",
+                        db.execute("INSERT INTO prediction VALUES (?,?,?,?,?,?,?,?,?)",
                                    (sample["id"], model["id"], *result))
             state = "complete_with_errors" if db.execute(
                 "SELECT 1 FROM prediction WHERE error IS NOT NULL LIMIT 1"
@@ -135,7 +135,7 @@ def run_batch(directory, models):
 
 def evaluate_image(directory, sample, model):
     if sample["error"] is not None:
-        return None, None, None, None, None, sample["error"]
+        return None, None, None, None, None, sample["error"], None
     noisy, gt, sigma = source_paths(sample)
     output = prediction_path(directory, sample, model["id"])
     try:
@@ -143,16 +143,16 @@ def evaluate_image(directory, sample, model):
         with INFERENCE_LOCK:
             timing = denoise(model["id"], noisy, output, sigma)
         psnr, ssim = reference_scores(pixels(output), pixels(gt))
-        return psnr, ssim, timing["seconds"], timing["device"], timing["sigma"], None
+        return psnr, ssim, timing["seconds"], timing["device"], timing["sigma"], None, timing["parameters"]
     except Exception as exc:
         logging.warning("批量评测失败：%s %s/%s", model["id"], sample["dataset"],
                         sample["filename"], exc_info=True)
-        return None, None, None, None, None, str(exc) or type(exc).__name__
+        return None, None, None, None, None, str(exc) or type(exc).__name__, None
 
 
 @benchmark.get("/benchmark")
 def page():
-    return current_app.send_static_file("benchmark.html")
+    return redirect(url_for("compare_models", run=request.args.get("run")))
 
 
 @benchmark.get("/api/benchmark/datasets")
@@ -191,7 +191,8 @@ def start_run():
         ):
             raise ValueError("请至少选择一个可用测试组和一个可用模型。")
     groups = list(dict.fromkeys(groups))
-    models = [dict(id=m, name=available[m]["name"], note=available[m]["note"])
+    models = [dict(id=m, name=available[m]["name"], note=available[m]["note"],
+                   weights_bytes=available[m]["weights_bytes"])
               for m in dict.fromkeys(selected)]
     preview = body.get("preview", False)
     if not isinstance(preview, bool):
@@ -247,9 +248,12 @@ def summarize(db, info):
         SELECT dataset, COUNT(*) AS compared, AVG(psnr) AS psnr, AVG(ssim) AS ssim
         FROM sample JOIN common ON common.sample_id=sample.id GROUP BY dataset
     """, (model_count,))}
-    averages = {(row["dataset"], row["model"]): row for row in db.execute(COMMON + """
+    # Legacy reports predate parameter-count recording.
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(prediction)")}
+    parameters = "MAX(p.parameters)" if "parameters" in columns else "NULL"
+    averages = {(row["dataset"], row["model"]): row for row in db.execute(COMMON + f"""
         SELECT dataset, model, AVG(p.psnr) AS psnr, AVG(p.ssim) AS ssim,
-               AVG(seconds) AS seconds, GROUP_CONCAT(DISTINCT device) AS device
+               AVG(seconds) AS seconds, GROUP_CONCAT(DISTINCT device) AS device, {parameters} AS parameters
         FROM sample s JOIN common ON common.sample_id=s.id
         JOIN prediction p ON p.sample_id=s.id GROUP BY dataset, model
     """, (model_count,))}
@@ -270,9 +274,9 @@ def summarize(db, info):
             avg, count = averages.get(key), counts.get(key)
             row = dict(base, model=model["id"], name=model["name"], done=count["done"] if count else 0,
                        failed=count["failed"] if count else 0, psnr=None, ssim=None, seconds=None,
-                       device=None, delta_psnr=None, delta_ssim=None)
+                       device=None, parameters=None, weights_bytes=model.get("weights_bytes"), delta_psnr=None, delta_ssim=None)
             if avg:
-                row.update({key: wire_value(avg[key]) for key in ("psnr", "ssim", "seconds", "device")})
+                row.update({key: wire_value(avg[key]) for key in ("psnr", "ssim", "seconds", "device", "parameters")})
                 if math.isfinite(avg["psnr"]) and math.isfinite(baseline["psnr"]):
                     row["delta_psnr"] = avg["psnr"] - baseline["psnr"]
                 row["delta_ssim"] = avg["ssim"] - baseline["ssim"]
@@ -361,7 +365,7 @@ def download_report(run_id, report_type):
         info = run_info(directory, db)
         if report_type == "summary":
             fields = ("dataset", "label", "model", "name", "total", "compared", "done", "failed",
-                      "psnr", "ssim", "delta_psnr", "delta_ssim", "seconds", "device")
+                      "psnr", "ssim", "delta_psnr", "delta_ssim", "seconds", "device", "parameters", "weights_bytes")
             rows = summarize(db, info)
         elif report_type == "images":
             fields = ("dataset", "filename", "model", "input_psnr", "input_ssim", "psnr", "ssim",

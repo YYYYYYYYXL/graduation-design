@@ -94,6 +94,7 @@ async function refreshReport(id, previousDone = -1) {
       byId('batch-runs').value = id;
     }
 
+    drawPerformancePlots(report);
     if (first || done !== previousDone) {
       loadSamples().catch(showError);
       await Promise.all(report.datasets.map(dataset => loadExample(dataset)));
@@ -109,7 +110,7 @@ async function refreshReport(id, previousDone = -1) {
 
 function runOption(run) {
   const date = new Date(run.created).toLocaleString('zh-CN', {hour12: false});
-  return new Option(`${date} · ${run.preview ? '预览' : '批量评测'} · ${run.datasets.length} 组`, run.id);
+  return new Option(`${date} · ${run.preview ? '预览' : '模型评测'} · ${run.datasets.length} 组`, run.id);
 }
 
 function openRun(id) {
@@ -221,13 +222,31 @@ async function initialize() {
   const [datasets, models, recent] = await Promise.all([json('/api/benchmark/datasets'), json('/api/models'), json(base)]);
   groups = datasets;
   groups.forEach(group => addChoice('batch-groups', group, group.label, group.error || `${group.count} 张测试图`, group.count > 0));
-  models.forEach(model => addChoice('batch-models', model, model.name,
-    model.available ? '' : '缺少权重', model.available));
+  const {table, body} = buildTable(['参评', '模型 / 方法', '架构', '权重文件 (MiB)', '状态']);
+  const families = {dncnn: '卷积网络', restormer: 'Transformer', p2n: 'U-Net · 预训练推理', bm3d: '传统非学习方法'};
+  for (const model of models) {
+    const row = body.insertRow(), checkbox = element('input');
+    checkbox.type = 'checkbox'; checkbox.value = model.id; checkbox.checked = model.available;
+    checkbox.disabled = !model.available; checkbox.setAttribute('aria-label', model.name);
+    checkbox.onchange = updateControls; row.insertCell().append(checkbox);
+    for (const value of [model.name, families[model.method] || model.method,
+      Number.isFinite(model.weights_bytes) ? fmt(model.weights_bytes / 1048576) : '—',
+      model.available ? '可用' : '缺少权重']) row.insertCell().textContent = value;
+  }
+  byId('batch-models').append(table);
   byId('batch-runs').replaceChildren(...recent.map(runOption));
   updateControls();
   const requested = new URLSearchParams(location.search).get('run');
   const id = requested || recent.find(run => run.state === 'running')?.id || recent[0]?.id;
   if (id) await openRun(id);
 }
+
+byId('cost-group').onchange = costFigure;
+new ResizeObserver(() => {
+  performanceCharts.forEach((chart, id) => {
+    const width = byId(id).clientWidth;
+    if (width && chart.getWidth() !== width) chart.resize();
+  });
+}).observe(byId('model-plots'));
 
 initialize().catch(showError);

@@ -1,36 +1,19 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>图像去噪系统</title><link rel="stylesheet" href="/static/style.css?v=23"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>单图去噪 · 图像去噪系统</title><link rel="stylesheet" href="/static/style.css?v=24"></head>
 <body>
-<header><a class="brand" href="/">图像去噪系统</a><nav aria-label="功能页面"><button class="active" data-tab="experiment">多模型对比</button><button data-tab="normal">图片去噪</button><a class="nav-link" href="/benchmark">批量评测</a></nav></header>
+<header><a class="brand" href="/">图像去噪系统</a><nav aria-label="功能页面"><a class="nav-link active" aria-current="page" href="/">单图去噪</a><a class="nav-link" href="/compare">多模型效果对比</a></nav></header>
 <main>
 <section id="workspace">
 <form id="denoise-form" class="panel">
-<h2 id="form-title">多模型对比</h2>
-<fieldset id="experiment-input"><legend>1 · 你准备了什么图片？</legend>
-<div class="mode-options"><label><input type="radio" name="input-mode" value="noisy" checked>我有带噪照片</label><label><input id="synthetic" type="radio" name="input-mode" value="clean">我有清晰照片</label></div>
-</fieldset>
-<label class="upload"><span id="upload-label">上传带噪照片</span><input id="image" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/heic,image/heif,.heic,.heif" required></label>
+<h2 id="form-title">单图去噪</h2>
+<label class="upload"><span id="upload-label">上传图片</span><input id="image" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/heic,image/heif,.heic,.heif" required></label>
 <button id="clear-image" class="remove-image" type="button" hidden>移除上传图片</button>
 <figure id="preview" hidden><img id="preview-image" alt="待处理的照片"><figcaption id="file-info"></figcaption></figure>
-<fieldset id="experiment-options"><legend>2 · 选择要比较的方法</legend>
-<div id="compare-models" class="checks"></div>
-<div id="noise-options" class="fields" hidden><label>添加多少噪点<select id="noise-level"><option value="15">轻度 · 15</option><option value="25" selected>中度 · 25</option><option value="50">重度 · 50</option></select></label></div>
-<details id="reference-options"><summary>我还有对应的干净照片（可选）</summary><label>上传干净参考图<input id="reference" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/heic,image/heif,.heic,.heif"></label><button id="clear-reference" type="button">移除参考图</button></details>
-</fieldset>
-<p id="selection-error" class="error" role="alert"></p><button id="submit" class="primary" type="submit" disabled>开始对比</button><p id="status" role="status" aria-live="polite"></p>
+<p id="selection-error" class="error" role="alert"></p><button id="submit" class="primary" type="submit" disabled>开始去噪</button><p id="status" role="status" aria-live="polite"></p>
 </form>
-<section id="result-panel" class="panel" hidden><div class="section-title"><h2 id="result-title">去噪结果</h2><button id="export" disabled hidden>导出对比指标 CSV</button></div>
-<details id="detail-panel" hidden><summary>多模型去噪结果</summary><div class="fields"><label>左右位置<input id="detail-x" type="range" min="0" max="100" value="50"></label><label>上下位置<input id="detail-y" type="range" min="0" max="100" value="50"></label><label>查看区域<select id="detail-size"><option value="64">64 × 64 像素</option><option value="128" selected>128 × 128 像素</option><option value="256">256 × 256 像素</option></select></label></div><button type="button" id="detail-png">导出对比图 PNG</button><div id="detail-grid"></div></details>
-<section id="single-score-charts" aria-labelledby="single-score-title" hidden>
-<h3 id="single-score-title">整图定量比较</h3>
-<div id="single-score-panels" class="table-scroll"></div>
-</section>
-<div id="comparison-summary" hidden></div><details id="full-views" open><summary>原尺寸图像、下载与运行参数</summary><div id="shared-input" class="images" hidden></div><div id="results"></div></details>
-</section>
-</section>
-</main>
-<script src="/static/crop-comparison.js?v=23" defer></script>
-<script src="/static/single-image-charts.js?v=23" defer></script>
-<script src="/static/app.js?v=23" defer></script>
+<section id="result-panel" class="panel" hidden><h2>去噪结果</h2>
+<div id="results"></div><div id="single-score-panels" class="table-scroll"></div></section>
+</section></main>
+<script src="/static/app.js?v=24" defer></script>
 </body></html>

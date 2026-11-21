@@ -32,6 +32,11 @@ Image.MAX_IMAGE_PIXELS = MAX_INPUT_PIXELS
 def index():
     return app.send_static_file("index.html")
 
+@app.get("/compare")
+def compare_models():
+    return app.send_static_file("compare.html")
+
+
 @app.get("/api/models")
 def models():
     return jsonify(model_list())

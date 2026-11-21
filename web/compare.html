@@ -3,25 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>批量评测 · 图像去噪系统</title>
-  <link rel="stylesheet" href="/static/style.css?v=23">
+  <title>多模型效果对比 · 图像去噪系统</title>
+  <link rel="stylesheet" href="/static/style.css?v=24">
 </head>
 <body>
   <header>
     <a class="brand" href="/">图像去噪系统</a>
-    <nav aria-label="功能页面">
-      <a class="nav-link" href="/">单图实验</a>
-      <a class="nav-link active" href="/benchmark" aria-current="page">批量评测</a>
-    </nav>
+    <nav aria-label="功能页面"><a class="nav-link" href="/">单图去噪</a><a class="nav-link active" aria-current="page" href="/compare">多模型效果对比</a></nav>
   </header>
   <main class="benchmark">
     <section class="panel">
-      <h1>批量评测</h1>
+      <h1>多模型效果对比</h1>
       <form id="batch-form">
-        <fieldset><legend>测试组</legend><div id="batch-groups" class="checks"></div></fieldset>
-        <fieldset><legend>对比方法</legend><div id="batch-models" class="checks"></div></fieldset>
+        <fieldset><legend>参评模型与基线</legend><div id="batch-models" class="table-scroll"></div></fieldset>
+        <fieldset><legend>共同测试集</legend><div id="batch-groups" class="checks"></div></fieldset>
         <div class="batch-actions">
-          <button class="primary" id="batch-start" type="submit" disabled>开始批量评测</button>
+          <button class="primary" id="batch-start" type="submit" disabled>开始模型评测</button>
           <button id="batch-preview" type="submit" disabled>预览 · 每组 1 张</button>
           <span id="batch-selection" class="muted"></span>
         </div>
@@ -37,6 +34,10 @@
       <progress id="batch-progress" max="1" value="0" aria-label="评测进度"></progress>
       <h3>多模型定量对比</h3>
       <div id="batch-summary" class="table-scroll"></div>
+      <section id="model-plots" hidden>
+        <section id="noise-panel"><h3>噪声强度与重建质量</h3><div id="noise-curve" class="model-plot"></div></section>
+        <section><h3>去噪耗时与重建质量</h3><label>测试组 <select id="cost-group"></select></label><div id="cost-plot" class="model-plot"></div><div id="model-costs" class="table-scroll"></div></section>
+      </section>
       <section id="batch-crop">
         <h3>多模型去噪结果</h3>
         <div class="fields">
@@ -63,8 +64,9 @@
       </div>
     </section>
   </main>
-  <script src="/static/crop-comparison.js?v=23" defer></script>
-  <script src="/static/benchmark-charts.js?v=23" defer></script>
-  <script src="/static/benchmark.js?v=23" defer></script>
+  <script src="/static/crop-comparison.js?v=24" defer></script>
+  <script src="/static/vendor/echarts/echarts.common.min.js" defer></script>
+  <script src="/static/benchmark-charts.js?v=24" defer></script>
+  <script src="/static/benchmark.js?v=24" defer></script>
 </body>
 </html>

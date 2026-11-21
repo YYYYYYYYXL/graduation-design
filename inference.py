@@ -20,8 +20,15 @@ _cached_model = None
 
 
 def model_list():
-    return [dict(item, available=item["path"] is None or (ROOT / item["path"]).is_file())
-            for item in MODELS.values()]
+    models = []
+    for item in MODELS.values():
+        path = ROOT / item["path"] if item["path"] else None
+        try:
+            size = path.stat().st_size if path and path.is_file() else None
+        except FileNotFoundError:
+            size = None
+        models.append(dict(item, available=path is None or size is not None, weights_bytes=size))
+    return models
 
 
 def load_model(item, device):
