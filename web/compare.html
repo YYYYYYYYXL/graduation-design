@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>多模型效果对比 · 图像去噪系统</title>
-  <link rel="stylesheet" href="/static/style.css?v=24">
+  <link rel="stylesheet" href="/static/style.css?v=25">
 </head>
 <body>
   <header>
@@ -25,6 +25,14 @@
         <p id="batch-error" class="error" role="alert"></p>
       </form>
     </section>
+    <section class="panel" aria-labelledby="epoch-title">
+      <div class="section-title">
+        <h2 id="epoch-title">各模型训练曲线</h2>
+        <label class="batch-picker">纵轴指标 <select id="epoch-metric" disabled></select></label>
+      </div>
+      <div id="epoch-chart" class="model-plot" aria-label="按 Epoch 对比各模型的训练记录"></div>
+      <p id="epoch-note" class="muted" role="status">正在读取训练日志…</p>
+    </section>
     <section id="batch-report" class="panel" hidden>
       <div class="section-title">
         <h2>评测汇总</h2>
@@ -34,20 +42,9 @@
       <progress id="batch-progress" max="1" value="0" aria-label="评测进度"></progress>
       <h3>多模型定量对比</h3>
       <div id="batch-summary" class="table-scroll"></div>
-      <section id="model-plots" hidden>
-        <section id="noise-panel"><h3>噪声强度与重建质量</h3><div id="noise-curve" class="model-plot"></div></section>
-        <section><h3>去噪耗时与重建质量</h3><label>测试组 <select id="cost-group"></select></label><div id="cost-plot" class="model-plot"></div><div id="model-costs" class="table-scroll"></div></section>
-      </section>
-      <section id="batch-crop">
-        <h3>多模型去噪结果</h3>
-        <div class="fields">
-          <label>左右位置<input id="batch-x" type="range" min="0" max="100" value="50"></label>
-          <label>上下位置<input id="batch-y" type="range" min="0" max="100" value="50"></label>
-          <label>查看区域<select id="batch-size"><option value="64">64 × 64 像素</option><option value="128" selected>128 × 128 像素</option><option value="256">256 × 256 像素</option></select></label>
-        </div>
-        <button type="button" id="batch-png" disabled>导出对比图 PNG</button>
-        <div id="batch-crops"></div>
-      </section>
+      <h3>模型开销</h3>
+      <label>测试组 <select id="cost-group"></select></label>
+      <div id="model-costs" class="table-scroll"></div>
       <div class="links"><a id="batch-summary-csv">下载汇总 CSV</a><a id="batch-images-csv">下载逐图 CSV</a></div>
     </section>
     <section id="batch-samples" class="panel" hidden>
@@ -64,9 +61,8 @@
       </div>
     </section>
   </main>
-  <script src="/static/crop-comparison.js?v=24" defer></script>
   <script src="/static/vendor/echarts/echarts.common.min.js" defer></script>
-  <script src="/static/benchmark-charts.js?v=24" defer></script>
-  <script src="/static/benchmark.js?v=24" defer></script>
+  <script src="/static/benchmark-charts.js?v=25" defer></script>
+  <script src="/static/benchmark.js?v=25" defer></script>
 </body>
 </html>

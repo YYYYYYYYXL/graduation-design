@@ -76,7 +76,7 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 #single-score-title { margin: 0 0 10px; color: #193e47; font-size: 19px; }
 .nav-link { display: inline-flex; align-items: center; padding: 8px 16px; border-radius: 6px; font-size: 14px; text-decoration: none; color: #344750; }
 .nav-link:hover { background: #eff4f5; }
-.benchmark { max-width: 1240px; }
+.benchmark { max-width: 1560px; }
 .benchmark h1 { margin: 0; font-size: 26px; }
 .batch-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .batch-actions .primary { margin: 0; }
@@ -102,12 +102,12 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 #result-panel h2, .benchmark h1, #batch-report h3, #single-score-title {
   font-family: Georgia, "Songti SC", SimSun, serif; color: #203943; letter-spacing: .025em;
 }
-#detail-panel, #batch-crop {
+#detail-panel {
   padding: 18px 0; margin: 20px 0; background: white; border: 0;
   border-top: 1px solid #657981; border-radius: 0;
 }
 
-#detail-grid, #batch-crops { display: block; margin-top: 16px; }
+#detail-grid { display: block; margin-top: 16px; }
 .paper-row { overflow-x: auto; margin: 20px 0; padding-bottom: 6px; }
 .paper-row h4 { margin: 0 0 8px; font-size: 14px; font-weight: 500; }
 .paper-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(110px,1fr); gap: 6px; }
@@ -126,5 +126,5 @@ td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .paper-strip .best-score figcaption span { font-weight: bold; }
 
-.model-plot { width: 100%; height: 370px; margin: 10px 0 24px; }
+.model-plot { width: 100%; height: clamp(480px, 68vh, 820px); margin: 12px 0; }
 #batch-models table th { background: #f2f6f7; }

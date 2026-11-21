@@ -9,7 +9,6 @@ const fmt = (value, digits = 2) => typeof value === 'number' ? value.toFixed(dig
 const base = '/api/benchmark/runs';
 let groups = [], activeId = '', report = null, pollTimer, starting = false, running = false;
 let page = 1, sampleRequest = 0;
-const examples = new Map();
 
 async function json(url, options) {
   const response = await fetch(url, {cache: 'no-store', ...options});
@@ -94,11 +93,10 @@ async function refreshReport(id, previousDone = -1) {
       byId('batch-runs').value = id;
     }
 
-    drawPerformancePlots(report);
+    if (first) byId('cost-group').replaceChildren(...report.datasets.map(id => new Option(groupName(id), id)));
+    drawCosts();
     if (first || done !== previousDone) {
       loadSamples().catch(showError);
-      await Promise.all(report.datasets.map(dataset => loadExample(dataset)));
-      if (id !== activeId) return;
     }
     if (running) pollTimer = setTimeout(() => refreshReport(id, done), 2000);
   } catch (error) {
@@ -118,7 +116,6 @@ function openRun(id) {
   activeId = id;
   report = null; page = 1;
   byId('batch-report').hidden = byId('batch-samples').hidden = true;
-  examples.clear(); byId('batch-crops').replaceChildren(); byId('batch-png').disabled = true;
   history.replaceState(null, '', `?run=${encodeURIComponent(id)}`);
   return refreshReport(id);
 }
@@ -130,11 +127,8 @@ async function loadSamples() {
   if (id !== activeId || version !== sampleRequest) return;
   const {table, body} = buildTable(['输入文件', '测试组', '输入 PSNR (dB)', '输入 SSIM', '结果']);
   data.items.forEach(sample => {
-    const row = body.insertRow(), button = element('button', sample.filename, 'batch-filename');
-    button.type = 'button';
-    button.onclick = () => loadExample(sample.dataset, sample.id, true);
-    row.insertCell().append(button);
-    [groupName(sample.dataset), fmt(sample.psnr), fmt(sample.ssim, 4),
+    const row = body.insertRow();
+    [sample.filename, groupName(sample.dataset), fmt(sample.psnr), fmt(sample.ssim, 4),
       sample.error ? '参考评分失败' : `${sample.ready}/${report.models.length} 个方法`]
       .forEach(value => { row.insertCell().textContent = value; });
   });
@@ -143,51 +137,6 @@ async function loadSamples() {
   byId('batch-prev').disabled = page <= 1;
   byId('batch-next').disabled = page * data.page_size >= data.total;
   byId('batch-page').textContent = `第 ${page} / ${Math.max(1, Math.ceil(data.total / data.page_size))} 页 · ${data.total} 张`;
-}
-
-async function loadExample(dataset, sampleId, focus = false) {
-  const run = activeId;
-  let slot = examples.get(dataset);
-  if (!slot) {
-    const container = element('div');
-    byId('batch-crops').append(container);
-    slot = {container, version: 0, sampleId: null, signature: '', plate: null};
-    examples.set(dataset, slot);
-  }
-  if (sampleId !== undefined) slot.sampleId = sampleId;
-  const version = ++slot.version;
-  const current = () => run === activeId && version === slot.version && examples.get(dataset) === slot;
-  try {
-    if (slot.sampleId === null) {
-      const samples = await json(base + '/' + run + '/samples?dataset=' + encodeURIComponent(dataset));
-      if (!current() || !samples.items.length) return;
-      slot.sampleId = samples.items[0].id;
-    }
-    const detail = await json(base + '/' + run + '/samples/' + slot.sampleId);
-    if (!current()) return;
-    const title = detail.label + ' · ' + detail.sample.filename;
-    const psnr = result => result?.psnr == null ? '' : fmt(result.psnr) + ' dB';
-    const views = [
-      {label: '带噪全图', url: detail.input_url, overview: true},
-      {label: '带噪输入', url: detail.input_url, score: psnr(detail.sample)},
-      {label: '参考图', url: detail.reference_url},
-      ...detail.models.map(model => ({label: model.name, url: model.url,
-        score: psnr(model.result), modelPsnr: model.result?.psnr, status: model.result?.error || '待评测'}))
-    ];
-    const signature = JSON.stringify([title, views]);
-    if (signature !== slot.signature) {
-      slot.plate = paperRow(title, views, {x: byId('batch-x'), y: byId('batch-y'), size: byId('batch-size')});
-      slot.container.replaceChildren(slot.plate.row);
-      slot.signature = signature;
-      byId('batch-png').disabled = false;
-    }
-    if (focus) {
-      slot.container.tabIndex = -1;
-      slot.container.focus();
-    }
-  } catch (error) {
-    if (current()) showError(error);
-  }
 }
 
 byId('batch-form').onsubmit = async event => {
@@ -214,12 +163,9 @@ byId('batch-next').onclick = () => { page++; loadSamples().catch(showError); };
 byId('batch-filter').onchange = byId('batch-search').oninput = () => {
   page = 1; loadSamples().catch(showError);
 };
-byId('batch-png').onclick = () => exportPlate(byId('batch-crops'), '多模型去噪结果');
-for (const id of ['batch-x', 'batch-y', 'batch-size']) {
-  byId(id).oninput = () => examples.forEach(slot => slot.plate?.redraw());
-}
 async function initialize() {
   const [datasets, models, recent] = await Promise.all([json('/api/benchmark/datasets'), json('/api/models'), json(base)]);
+  loadEpochCharts(models).catch(error => { byId('epoch-note').textContent = error.message; });
   groups = datasets;
   groups.forEach(group => addChoice('batch-groups', group, group.label, group.error || `${group.count} 张测试图`, group.count > 0));
   const {table, body} = buildTable(['参评', '模型 / 方法', '架构', '权重文件 (MiB)', '状态']);
@@ -241,12 +187,5 @@ async function initialize() {
   if (id) await openRun(id);
 }
 
-byId('cost-group').onchange = costFigure;
-new ResizeObserver(() => {
-  performanceCharts.forEach((chart, id) => {
-    const width = byId(id).clientWidth;
-    if (width && chart.getWidth() !== width) chart.resize();
-  });
-}).observe(byId('model-plots'));
-
+byId('cost-group').onchange = drawCosts;
 initialize().catch(showError);

@@ -47,7 +47,6 @@ def settings():
     return jsonify(default_model=DEFAULT_MODEL, max_pixels=MAX_PIXELS, max_input_pixels=MAX_INPUT_PIXELS,
                    max_upload_bytes=app.config["MAX_CONTENT_LENGTH"])
 
-""" 
 @app.get("/api/history/<model_id>")
 def history(model_id):
     item = MODELS.get(model_id)
@@ -58,9 +57,9 @@ def history(model_id):
         return jsonify(rows=[], note="该模型目录中没有训练日志。")
     with path.open(encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.DictReader(stream))
-    return jsonify(rows=rows, note="原有 CSV 日志，未补写、未伪造。")
+    return jsonify(rows=rows)
 
- """
+
 def read_image(upload):
     if upload is None or not upload.filename:
         raise ValueError("请选择图片")
