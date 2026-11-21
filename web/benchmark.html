@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>批量评测 · 图像去噪系统</title>
-  <link rel="stylesheet" href="/static/style.css?v=22">
+  <link rel="stylesheet" href="/static/style.css?v=23">
 </head>
 <body>
   <header>
@@ -35,20 +35,17 @@
       </div>
       <p id="batch-state" role="status"></p>
       <progress id="batch-progress" max="1" value="0" aria-label="评测进度"></progress>
-      <h3>表 1　各测试组的共同样本均值</h3>
+      <h3>多模型定量对比</h3>
       <div id="batch-summary" class="table-scroll"></div>
-      <section class="batch-charts" aria-labelledby="batch-chart-title">
-        <h3 id="batch-chart-title">图 1　逐图配对差值的经验累积分布</h3>
-        <div class="batch-chart-controls">
-          <label>测试组 <select id="batch-chart-group"></select></label>
-          <label>方法 <select id="batch-chart-method"></select></label>
-          <label>对照 <select id="batch-chart-base"></select></label>
-          <label>指标 <select id="batch-chart-metric"><option value="psnr">PSNR</option><option value="ssim">SSIM</option></select></label>
+      <section id="batch-crop">
+        <h3>多模型去噪结果</h3>
+        <div class="fields">
+          <label>左右位置<input id="batch-x" type="range" min="0" max="100" value="50"></label>
+          <label>上下位置<input id="batch-y" type="range" min="0" max="100" value="50"></label>
+          <label>查看区域<select id="batch-size"><option value="64">64 × 64 像素</option><option value="128" selected>128 × 128 像素</option><option value="256">256 × 256 像素</option></select></label>
         </div>
-        <p id="batch-chart-context" class="muted" role="status"></p>
-        <div id="batch-chart-content" class="batch-chart-content" role="img" aria-label="逐图差值的经验累积分布，分位数和计数见下表" hidden></div>
-        <div id="batch-chart-stats" class="table-scroll"></div>
-        <button id="batch-chart-export" type="button" disabled>导出分布图 SVG</button>
+        <button type="button" id="batch-png" disabled>导出对比图 PNG</button>
+        <div id="batch-crops"></div>
       </section>
       <div class="links"><a id="batch-summary-csv">下载汇总 CSV</a><a id="batch-images-csv">下载逐图 CSV</a></div>
     </section>
@@ -65,27 +62,9 @@
         <span id="batch-page" class="muted"></span>
       </div>
     </section>
-    <section id="batch-detail" class="panel" hidden aria-labelledby="batch-detail-title">
-      <div class="section-title">
-        <h2 id="batch-detail-title" tabindex="-1">样本详情</h2>
-        <button id="batch-close-detail" type="button">关闭详情</button>
-      </div>
-      <details id="batch-crop" hidden>
-        <summary>定性比较 · 同位置局部图版</summary>
-        <div class="fields">
-          <label>左右位置<input id="batch-x" type="range" min="0" max="100" value="50"></label>
-          <label>上下位置<input id="batch-y" type="range" min="0" max="100" value="50"></label>
-          <label>查看区域<select id="batch-size"><option value="64">64 × 64 像素</option><option value="128" selected>128 × 128 像素</option><option value="256">256 × 256 像素</option></select></label>
-        </div>
-        <div class="plate-actions"><label>局部视图 <select id="batch-mode"><option value="detail">纹理细节</option><option value="error">对参考图的绝对误差</option></select></label><button type="button" id="batch-png">导出图版 PNG</button></div><p id="batch-legend" class="muted"></p><p id="batch-crop-position" class="muted"></p>
-        <div id="batch-crops" class="batch-image-grid"></div>
-      </details>
-      <details><summary>查看原尺寸图像与各方法状态</summary><div id="batch-views" class="batch-image-grid"></div></details>
-    </section>
   </main>
-  <script src="/static/crop-comparison.js?v=22" defer></script>
-  <script src="/static/vendor/echarts/echarts.common.min.js?v=6.1.0" defer></script>
-  <script src="/static/benchmark-charts.js?v=22" defer></script>
-  <script src="/static/benchmark.js?v=22" defer></script>
+  <script src="/static/crop-comparison.js?v=23" defer></script>
+  <script src="/static/benchmark-charts.js?v=23" defer></script>
+  <script src="/static/benchmark.js?v=23" defer></script>
 </body>
 </html>

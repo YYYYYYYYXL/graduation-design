@@ -6,11 +6,10 @@ const element = (tag, text, className) => {
   return item;
 };
 const fmt = (value, digits = 2) => typeof value === 'number' ? value.toFixed(digits) : value ?? '—';
-const signed = (value, digits) => typeof value === 'number' && value > 0
-  ? '+' + fmt(value, digits) : fmt(value, digits);
 const base = '/api/benchmark/runs';
 let groups = [], activeId = '', report = null, pollTimer, starting = false, running = false;
-let page = 1, sampleRequest = 0, detailRequest = 0, currentDetail = null, cropImages = [];
+let page = 1, sampleRequest = 0;
+const examples = new Map();
 
 async function json(url, options) {
   const response = await fetch(url, {cache: 'no-store', ...options});
@@ -58,36 +57,7 @@ function buildTable(headings) {
 }
 
 function drawSummary() {
-  const {table, body} = buildTable(['测试组 · 共同计分', '方法', 'PSNR ↑ (dB)', 'SSIM ↑', 'ΔPSNR (dB)', '耗时 (s/张)', '设备', '失败数']);
-  const precision = {psnr: 2, ssim: 4};
-  for (const dataset of report.datasets) {
-    const rows = report.rows.filter(row => row.dataset === dataset);
-    const best = {};
-    for (const [key, digits] of Object.entries(precision)) {
-      const measured = rows.filter(row => row.model !== 'input').map(row => row[key] === '∞'
-        ? Infinity : Number.isFinite(row[key]) ? Number(row[key].toFixed(digits)) : -Infinity);
-      best[key] = Math.max(...measured);
-    }
-    rows.forEach((row, index) => {
-      const tr = body.insertRow(), input = row.model === 'input';
-      if (!index) {
-        const group = element('th', groupName(dataset)); group.rowSpan = rows.length;
-        group.append(element('small', row.compared + '/' + row.total + ' 张')); tr.append(group);
-      }
-      const name = element('th', row.name, 'batch-model-name'); name.scope = 'row'; tr.append(name);
-      if (input) tr.className = 'baseline';
-      for (const [key, digits] of Object.entries(precision)) {
-        const value = fmt(row[key], digits);
-        const num = value === '∞' ? Infinity : Number(value);
-        const cell = tr.insertCell();
-        if (!input && num === best[key]) cell.append(element('strong', value));
-        else cell.textContent = value;
-      }
-      [signed(row.delta_psnr, 2), fmt(row.seconds, 3), row.device?.toUpperCase() || '—',
-        input ? '—' : row.failed].forEach(value => tr.insertCell().textContent = value);
-    });
-  }
-  byId('batch-summary').replaceChildren(table);
+  byId('batch-summary').replaceChildren(benchmarkTables(report));
   byId('batch-summary-csv').href = `${base}/${activeId}/summary.csv`;
   byId('batch-images-csv').href = `${base}/${activeId}/images.csv`;
   const rowsWithModels = report.rows.filter(row => row.model !== 'input');
@@ -123,10 +93,11 @@ async function refreshReport(id, previousDone = -1) {
       }
       byId('batch-runs').value = id;
     }
-    updateBenchmarkCharts(report);
+
     if (first || done !== previousDone) {
       loadSamples().catch(showError);
-      if (currentDetail) loadDetail(currentDetail).catch(showError);
+      await Promise.all(report.datasets.map(dataset => loadExample(dataset)));
+      if (id !== activeId) return;
     }
     if (running) pollTimer = setTimeout(() => refreshReport(id, done), 2000);
   } catch (error) {
@@ -146,7 +117,7 @@ function openRun(id) {
   activeId = id;
   report = null; page = 1;
   byId('batch-report').hidden = byId('batch-samples').hidden = true;
-  closeDetail();
+  examples.clear(); byId('batch-crops').replaceChildren(); byId('batch-png').disabled = true;
   history.replaceState(null, '', `?run=${encodeURIComponent(id)}`);
   return refreshReport(id);
 }
@@ -160,10 +131,7 @@ async function loadSamples() {
   data.items.forEach(sample => {
     const row = body.insertRow(), button = element('button', sample.filename, 'batch-filename');
     button.type = 'button';
-    button.onclick = () => {
-      currentDetail = sample.id;
-      loadDetail(sample.id, true).catch(showError);
-    };
+    button.onclick = () => loadExample(sample.dataset, sample.id, true);
     row.insertCell().append(button);
     [groupName(sample.dataset), fmt(sample.psnr), fmt(sample.ssim, 4),
       sample.error ? '参考评分失败' : `${sample.ready}/${report.models.length} 个方法`]
@@ -176,77 +144,49 @@ async function loadSamples() {
   byId('batch-page').textContent = `第 ${page} / ${Math.max(1, Math.ceil(data.total / data.page_size))} 页 · ${data.total} 张`;
 }
 
-function closeDetail() {
-  ++detailRequest;
-  currentDetail = null;
-  cropImages = [];
-  byId('batch-views').replaceChildren();
-  byId('batch-crops').replaceChildren();
-  byId('batch-detail').hidden = true;
-  byId('batch-crop').open = true; byId('batch-mode').value = 'detail';
-}
-
-function updateCrops() {
-  const source = cropImages.find(item => item.image.naturalWidth)?.image;
-  if (!source || !byId('batch-crop').open) return;
-  const region = cropRegion(source.naturalWidth, source.naturalHeight, byId('batch-size').value,
-    byId('batch-x').value, byId('batch-y').value);
-  byId('batch-crop-position').textContent = `左上角 (${region.left}, ${region.top}) · ${region.size} × ${region.size} 像素`;
-  const target = cropImages.find(item => item.isReference)?.image;
-  const mode = byId('batch-mode');
-  mode.options[1].disabled = !target?.naturalWidth;
-  if (!target?.naturalWidth) mode.value = 'detail';
-  byId('batch-legend').hidden = mode.value !== 'error';
-  byId('batch-legend').textContent = plateModes[mode.value];
-  byId('batch-legend').classList.toggle('error-scale', mode.value === 'error');
-  cropImages.forEach(({image, canvas}) => {
-    if (image.naturalWidth === source.naturalWidth && image.naturalHeight === source.naturalHeight) {
-      drawCrop(canvas, image, region, mode.value === 'error' ? target : null);
-    }
-  });
-}
-
-async function loadDetail(sampleId, focus = false) {
-  const id = activeId, version = ++detailRequest;
-  const detail = await json(`${base}/${id}/samples/${sampleId}`);
-  if (id !== activeId || version !== detailRequest) return;
-  const gallery = byId('batch-views'), crops = byId('batch-crops');
-  gallery.replaceChildren(); crops.replaceChildren(); cropImages = [];
-  byId('batch-detail-title').textContent = `${detail.label} · ${detail.sample.filename}`;
-  byId('batch-detail').hidden = false;
-  const views = [
-    {name: '带噪输入', url: detail.input_url, result: detail.sample},
-    {name: '干净参考图', url: detail.reference_url},
-    ...detail.models,
-  ];
-  for (const {name, url, result} of views) {
-    const figure = element('figure');
-    figure.append(element('figcaption', name));
-    gallery.append(figure);
-    if (!url) {
-      figure.append(element('p', result?.error || '等待去噪结果', result?.error ? 'error' : 'muted'));
-      continue;
-    }
-    const link = element('a'), image = element('img');
-    image.alt = name;
-    link.href = url; link.target = '_blank'; link.rel = 'noopener';
-    link.append(image); figure.append(link);
-    if (result) figure.append(element('small', result.error || `${fmt(result.psnr)} dB / ${fmt(result.ssim, 4)}`));
-    const crop = element('figure'), canvas = element('canvas');
-    canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', `${name}的局部放大`);
-    crop.dataset.label = name;
-    crop.dataset.scores = result ? 'PSNR ' + fmt(result.psnr) + ' dB · SSIM ' + fmt(result.ssim, 4) : '参考图（GT）';
-    canvas.hidden = true;
-    crop.append(element('figcaption', name), canvas, element('small', crop.dataset.scores)); crops.append(crop);
-    cropImages.push({image, canvas, isReference: url === detail.reference_url});
-    image.onload = updateCrops;
-    image.onerror = () => figure.append(element('p', '图片文件无法读取。', 'error'));
-    image.src = url;
+async function loadExample(dataset, sampleId, focus = false) {
+  const run = activeId;
+  let slot = examples.get(dataset);
+  if (!slot) {
+    const container = element('div');
+    byId('batch-crops').append(container);
+    slot = {container, version: 0, sampleId: null, signature: '', plate: null};
+    examples.set(dataset, slot);
   }
-  byId('batch-crop').hidden = cropImages.length < 2;
-  if (focus) byId('batch-detail-title').focus();
-  updateCrops();
+  if (sampleId !== undefined) slot.sampleId = sampleId;
+  const version = ++slot.version;
+  const current = () => run === activeId && version === slot.version && examples.get(dataset) === slot;
+  try {
+    if (slot.sampleId === null) {
+      const samples = await json(base + '/' + run + '/samples?dataset=' + encodeURIComponent(dataset));
+      if (!current() || !samples.items.length) return;
+      slot.sampleId = samples.items[0].id;
+    }
+    const detail = await json(base + '/' + run + '/samples/' + slot.sampleId);
+    if (!current()) return;
+    const title = detail.label + ' · ' + detail.sample.filename;
+    const psnr = result => result?.psnr == null ? '' : fmt(result.psnr) + ' dB';
+    const views = [
+      {label: '带噪全图', url: detail.input_url, overview: true},
+      {label: '带噪输入', url: detail.input_url, score: psnr(detail.sample)},
+      {label: '参考图', url: detail.reference_url},
+      ...detail.models.map(model => ({label: model.name, url: model.url,
+        score: psnr(model.result), modelPsnr: model.result?.psnr, status: model.result?.error || '待评测'}))
+    ];
+    const signature = JSON.stringify([title, views]);
+    if (signature !== slot.signature) {
+      slot.plate = paperRow(title, views, {x: byId('batch-x'), y: byId('batch-y'), size: byId('batch-size')});
+      slot.container.replaceChildren(slot.plate.row);
+      slot.signature = signature;
+      byId('batch-png').disabled = false;
+    }
+    if (focus) {
+      slot.container.tabIndex = -1;
+      slot.container.focus();
+    }
+  } catch (error) {
+    if (current()) showError(error);
+  }
 }
 
 byId('batch-form').onsubmit = async event => {
@@ -273,12 +213,10 @@ byId('batch-next').onclick = () => { page++; loadSamples().catch(showError); };
 byId('batch-filter').onchange = byId('batch-search').oninput = () => {
   page = 1; loadSamples().catch(showError);
 };
-byId('batch-close-detail').onclick = () => { closeDetail(); byId('batch-search').focus(); };
-byId('batch-crop').ontoggle = updateCrops;
-byId('batch-png').onclick = () => exportPlate(byId('batch-crops'), byId('batch-detail-title').textContent,
-  byId('batch-crop-position').textContent, byId('batch-legend').textContent);
-['batch-x', 'batch-y', 'batch-size', 'batch-mode'].forEach(id => { byId(id).oninput = updateCrops; });
-
+byId('batch-png').onclick = () => exportPlate(byId('batch-crops'), '多模型去噪结果');
+for (const id of ['batch-x', 'batch-y', 'batch-size']) {
+  byId(id).oninput = () => examples.forEach(slot => slot.plate?.redraw());
+}
 async function initialize() {
   const [datasets, models, recent] = await Promise.all([json('/api/benchmark/datasets'), json('/api/models'), json(base)]);
   groups = datasets;

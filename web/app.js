@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
-let models = [], tab = 'normal', results = [], defaultModel = '', previewUrl = '', validImage = false;
-let detailImages = [];
+let models = [], tab = 'experiment', results = [], defaultModel = '', previewUrl = '', validImage = false;
+let detailImages = [], singlePlate;
 let processing = false;
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 async function api(url, options) {
@@ -17,8 +17,8 @@ function clearResults() {
   renderSingleImageCharts(results);
   $('result-panel').hidden = true; $('export').disabled = true;
   $('status').textContent = '';
-  detailImages = []; $('detail-grid').replaceChildren(); $('detail-panel').hidden = true;
-  $('detail-panel').open = true; $('detail-mode').value = 'detail';
+  detailImages = []; singlePlate = null; $('detail-grid').replaceChildren(); $('detail-panel').hidden = true;
+  $('detail-panel').open = true;
 }
 function selectTab(next) {
   if (tab !== next) clearResults();
@@ -28,7 +28,7 @@ function selectTab(next) {
   for (const id of ['experiment-input', 'experiment-options']) {
     $(id).hidden = !experiment; $(id).disabled = !experiment;
   }
-  $('form-title').textContent = experiment ? '实验对比' : '图片去噪';
+  $('form-title').textContent = experiment ? '多模型对比' : '图片去噪';
   $('result-title').textContent = experiment ? '对比结果' : '去噪结果';
   $('export').hidden = !experiment;
   $('full-views').open = !experiment;
@@ -67,7 +67,7 @@ function removeImageViews(url) {
     if (figure.dataset.imageUrl === url) figure.remove();
   });
   detailImages = detailImages.filter(item => item.url !== url);
-  drawDetails();
+  renderDetailPlate();
   $('detail-panel').hidden = !detailImages.length;
   $('shared-input').hidden = !$('shared-input').children.length;
 }
@@ -111,13 +111,15 @@ function addResult(result) {
     if (results.length === 1) {
       $('shared-input').hidden = false;
       $('shared-input').append(imageFigure('共同输入 · 带噪照片', result.input_url));
-      addDetailImage('带噪输入', result.input_url, result.input_metrics);
+      detailImages.push({label: '带噪全图', url: result.input_url, overview: true},
+        {label: '带噪输入', url: result.input_url, score: plateScore(result.input_metrics, result.reference_provided)});
       if (result.reference_url) {
         $('shared-input').append(imageFigure('干净参考图', result.reference_url));
-        addDetailImage('干净参考图', result.reference_url, null, true);
+        detailImages.push({label: '参考图', url: result.reference_url});
       }
     }
-    addDetailImage(result.model_name, result.output_url, result.metrics, false, () => removeResult(result));
+    detailImages.push({label: result.model_name, url: result.output_url, modelPsnr: result.metrics.psnr, score: plateScore(result.metrics, result.reference_provided)});
+    renderDetailPlate();
     showSummary();
   }
   const images = node('div', undefined, 'images');
@@ -132,46 +134,20 @@ function addResult(result) {
   }
   article.append(links); $('results').append(article);
 }
-function addDetailImage(label, url, metrics, isReference = false, onRemove = () => removeImageViews(url)) {
-  const figure = node('figure'), canvas = node('canvas'), img = new Image();
-  figure.dataset.imageUrl = url;
-  canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', `${label}的局部放大`);
-  const caption = node('figcaption', undefined, 'image-caption');
-  caption.append(node('span', label), removeButton(label, onRemove));
-  const scores = !metrics ? '参考图（GT）' : results[0].reference_provided
-    ? 'PSNR ' + format(metrics.psnr, 2) + ' dB · SSIM ' + format(metrics.ssim, 4)
-    : 'BRISQUE ' + format(metrics.brisque, 2);
-  figure.dataset.label = label; figure.dataset.scores = scores;
-  canvas.hidden = true;
-  figure.append(caption, canvas, node('small', scores)); $('detail-grid').append(figure);
-  const item = {img, canvas, url, isReference, ready: false}; detailImages.push(item);
-  img.onload = () => { item.ready = true; if ($('detail-panel').open) drawDetails(); };
-  img.onerror = () => figure.append(node('p', '图片加载失败，可点击上方图片重新查看。', 'error'));
-  img.src = url; $('detail-panel').hidden = false; drawDetails();
+function plateScore(metrics, paired) {
+  return paired ? format(metrics.psnr, 2) + ' dB' : 'BRISQUE ' + format(metrics.brisque, 2);
 }
-function drawDetails() {
-  if (!results.length) return;
-  const {width, height} = results[0];
-  const crop = cropRegion(width, height, $('detail-size').value, $('detail-x').value, $('detail-y').value);
-  const {left, top, size} = crop;
-  $('detail-location').textContent = `ROI (${left}, ${top}) · ${size} × ${size} px`;
-  const target = detailImages.find(item => item.isReference);
-  const mode = $('detail-mode');
-  mode.options[1].disabled = !target?.ready;
-  if (!target?.ready) mode.value = 'detail';
-  $('detail-legend').hidden = mode.value !== 'error';
-  $('detail-legend').textContent = plateModes[mode.value];
-  $('detail-legend').classList.toggle('error-scale', mode.value === 'error');
-  $('detail-png').disabled = !detailImages.some(item => item.ready);
-  detailImages.forEach(({img, canvas, ready}) => {
-    if (ready) drawCrop(canvas, img, crop, mode.value === 'error' ? target.img : null);
-  });
+
+function renderDetailPlate() {
+  $('detail-panel').hidden = !detailImages.length;
+  if (!detailImages.length) return;
+  const result = results[0], file = $('image').files[0];
+  const title = (file?.name || '样本') + (result.synthetic ? ' · σ=' + result.requested_sigma : '');
+  singlePlate = paperRow(title, detailImages, {x: $('detail-x'), y: $('detail-y'), size: $('detail-size')});
+  $('detail-grid').replaceChildren(singlePlate.row);
 }
-$('detail-png').onclick = () => exportPlate($('detail-grid'),
-  $('image').files[0].name + (results[0].synthetic ? ' · σ=' + results[0].requested_sigma + ' · seed=' + results[0].seed : ''),
-  $('detail-location').textContent, $('detail-legend').textContent);
-['detail-x', 'detail-y', 'detail-size', 'detail-mode'].forEach(id => $(id).oninput = drawDetails);
-$('detail-panel').ontoggle = () => { if ($('detail-panel').open) drawDetails(); };
+$('detail-png').onclick = () => exportPlate($('detail-grid'), '多模型去噪结果');
+for (const id of ['detail-x', 'detail-y', 'detail-size']) $(id).oninput = () => singlePlate?.redraw();
 $('denoise-form').onsubmit = async event => {
   event.preventDefault();
   if (!validImage || processing) return;
